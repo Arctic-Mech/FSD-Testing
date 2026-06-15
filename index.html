@@ -434,7 +434,7 @@
    Storage: localStorage (key: fsd_records_v1)
    ========================================================= */
 
-const APP_VERSION = 'v2.4';
+const APP_VERSION = 'v2.5';
 
 const STORAGE_KEY = 'fsd_records_v1';
 const HOSPITALS_KEY = 'fsd_hospitals_v1';
@@ -585,12 +585,18 @@ function renderHospitalSelect(){
     const count = records.filter(r=>r.hospitalId===h.id).length;
     return `
       <div>
-        <button class="folder-btn" onclick="selectHospital('${escapeJs(h.id)}')">
+        <button class="folder-btn" data-action="select-hospital" data-id="${escapeJs(h.id)}">
           <span>${escapeHtml(h.name)}</span>
           <span class="folder-count">${count} damper${count===1?'':'s'} &rsaquo;</span>
         </button>
       </div>`;
   }).join('');
+
+  list.addEventListener('click', function(e){
+    const btn = e.target.closest('[data-action]');
+    if(!btn) return;
+    if(btn.dataset.action==='select-hospital') selectHospital(btn.dataset.id);
+  });
 }
 
 function copyHospitalLink(hospitalId){
@@ -663,7 +669,7 @@ function renderSubFolderSelect(){
   const allCount = records.filter(r=>r.hospitalId===currentHospitalId).length;
 
   const allBtn = `
-    <button class="folder-btn" onclick="selectSubFolder(null)">
+    <button class="folder-btn" data-action="select-sf" data-sf="">
       <span>All Buildings</span>
       <span class="folder-count">${allCount} damper${allCount===1?'':'s'} &rsaquo;</span>
     </button>`;
@@ -672,7 +678,7 @@ function renderSubFolderSelect(){
     const count = records.filter(r=>r.hospitalId===currentHospitalId && r.subFolder===sf).length;
     return `
       <div>
-        <button class="folder-btn" onclick="selectSubFolder('${escapeJs(sf)}')">
+        <button class="folder-btn" data-action="select-sf" data-sf="${escapeJs(sf)}">
           <span>${escapeHtml(sf)}</span>
           <span class="folder-count">${count} damper${count===1?'':'s'} &rsaquo;</span>
         </button>
@@ -680,6 +686,12 @@ function renderSubFolderSelect(){
   }).join('');
 
   list.innerHTML = allBtn + sfBtns;
+
+  list.addEventListener('click', function(e){
+    const btn = e.target.closest('[data-action="select-sf"]');
+    if(!btn) return;
+    selectSubFolder(btn.dataset.sf || null);
+  });
 }
 
 function selectSubFolder(sf){
@@ -890,26 +902,40 @@ function renderHospitalSettingsList(){
     const subFoldersHtml = (h.subFolders||[]).map((sf,idx)=>`
       <div class="subfolder-row">
         <span>${escapeHtml(sf)}</span>
-        <button class="btn btn-danger btn-sm" onclick="deleteSubFolder('${escapeJs(h.id)}', ${idx})">Remove</button>
+        <button class="btn btn-danger btn-sm" data-action="del-sf" data-hid="${escapeJs(h.id)}" data-idx="${idx}">Remove</button>
       </div>
     `).join('') || `<div class="empty" style="padding:10px;">No sub-folders yet.</div>`;
 
     return `
-      <div class="card">
+      <div class="card" data-hospital-id="${escapeJs(h.id)}">
         <div class="btn-row" style="justify-content:space-between;align-items:center;margin-bottom:10px;">
           <h2 style="margin:0;">${escapeHtml(h.name)}</h2>
           <div style="display:flex;gap:8px;">
-            <button class="btn btn-outline btn-sm" onclick="copyHospitalLink('${escapeJs(h.id)}')">&#128279; Link</button>
-            <button class="btn btn-outline btn-sm" onclick="renameHospital('${escapeJs(h.id)}')">Rename</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteHospital('${escapeJs(h.id)}')">Delete</button>
+            <button class="btn btn-outline btn-sm" data-action="copy-link" data-hid="${escapeJs(h.id)}">&#128279; Link</button>
+            <button class="btn btn-outline btn-sm" data-action="rename" data-hid="${escapeJs(h.id)}">Rename</button>
+            <button class="btn btn-danger btn-sm" data-action="del-hospital" data-hid="${escapeJs(h.id)}">Delete</button>
           </div>
         </div>
         <label>Sub-Folders / Buildings</label>
         ${subFoldersHtml}
-        <button class="btn btn-outline" onclick="addSubFolder('${escapeJs(h.id)}')">+ Add Sub-Folder</button>
+        <button class="btn btn-outline" data-action="add-sf" data-hid="${escapeJs(h.id)}">+ Add Sub-Folder</button>
       </div>
     `;
   }).join('');
+
+  // Event delegation for all settings actions
+  wrap.addEventListener('click', function(e){
+    const btn = e.target.closest('[data-action]');
+    if(!btn) return;
+    const action = btn.dataset.action;
+    const hid = btn.dataset.hid;
+    const idx = btn.dataset.idx;
+    if(action==='del-sf')       deleteSubFolder(hid, parseInt(idx));
+    if(action==='copy-link')    copyHospitalLink(hid);
+    if(action==='rename')       renameHospital(hid);
+    if(action==='del-hospital') deleteHospital(hid);
+    if(action==='add-sf')       addSubFolder(hid);
+  });
 }
 
 /* =========================================================
@@ -953,21 +979,27 @@ function renderIdEntry(){
       <input type="text" id="entry-damper-id" placeholder="e.g. FSD-101 or scan/type ID" autocomplete="off">
       <div class="id-suggest" id="id-suggest" style="display:none;"></div>
     </div>
-    <button class="btn btn-primary" onclick="beginWizard()">Begin Inspection</button>
+    <button class="btn btn-primary" id="begin-inspection-btn">Begin Inspection</button>
     <div style="margin-top:14px;font-size:12px;color:var(--text-dim);">
       Existing dampers can be re-opened from the Project Log to edit or add photos.
     </div>
   `;
   const input = document.getElementById('entry-damper-id');
   const suggest = document.getElementById('id-suggest');
+  document.getElementById('begin-inspection-btn').addEventListener('click', beginWizard);
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') beginWizard(); });
   input.addEventListener('input', ()=>{
     const val = input.value.trim().toLowerCase();
     if(!val){ suggest.style.display='none'; return; }
     const matches = existingIds.filter(id=>id.toLowerCase().includes(val)).slice(0,5);
     if(matches.length){
-      suggest.innerHTML = matches.map(id=>`<div onclick="selectExistingId('${id.replace(/'/g,"\\'")}')">${id}</div>`).join('');
+      suggest.innerHTML = matches.map(id=>`<div data-id="${escapeJs(id)}">${id}</div>`).join('');
       suggest.style.display='block';
     } else suggest.style.display='none';
+  });
+  suggest.addEventListener('click', e=>{
+    const div = e.target.closest('[data-id]');
+    if(div){ suggest.style.display='none'; selectExistingId(div.dataset.id); }
   });
   input.focus();
 }
@@ -1035,7 +1067,7 @@ function renderStep(){
   if(step.type==='select'){
     body = `<div class="opt-grid">` + stepOptions.map(opt=>{
       const selected = wizard.data[step.key]===opt ? 'selected' : '';
-      return `<button class="opt-btn ${selected}" onclick="setStepValue('${escapeJs(step.key)}','${escapeJs(opt)}')">
+      return `<button class="opt-btn ${selected}" data-val="${escapeJs(opt)}">
                 <span>${opt}</span><span class="chk">${selected?'&#10003;':''}</span>
               </button>`;
     }).join('') + `</div>`;
@@ -1047,13 +1079,6 @@ function renderStep(){
     body = `<input type="text" id="step-input" value="${wizard.data[step.key]||''}" placeholder="Enter ${step.label.toLowerCase()}" autocomplete="off">`;
   }
 
-  // For optional select steps (incl. dynamic ones like subFolder), show a Skip button
-  const skipBtn = (step.type==='select' && step.optional)
-    ? `<button class="btn" onclick="nextStep()">Skip</button>` : '';
-  const nextBtn = step.type!=='select'
-    ? `<button class="btn btn-primary" onclick="nextStepFromInput('${step.key}', ${step.optional?'true':'false'})">${step.optional?'Next (or skip)':'Next'}</button>`
-    : skipBtn;
-
   card.innerHTML = `
     <div class="wizard-progress">
       <span>STEP ${wizard.step+1} / ${STEPS.length}</span>
@@ -1063,18 +1088,41 @@ function renderStep(){
     <div class="step-question">${step.label}</div>
     ${body}
     <div class="btn-row" style="margin-top:14px;">
-      ${wizard.step>0 ? '<button class="btn" onclick="prevStep()">Back</button>' : '<button class="btn" onclick="cancelWizard()">Cancel</button>'}
-      ${nextBtn}
+      ${wizard.step>0 ? '<button class="btn" id="step-back-btn">Back</button>' : '<button class="btn" id="step-cancel-btn">Cancel</button>'}
+      ${step.type==='select' && step.optional ? '<button class="btn" id="step-skip-btn">Skip</button>' : ''}
+      ${step.type!=='select' ? `<button class="btn btn-primary" id="step-next-btn">${step.optional?'Next (or skip)':'Next'}</button>` : ''}
     </div>
   `;
 
+  // Attach listeners — no inline onclick needed (avoids GitHub Pages CSP blocks)
+  const backBtn = document.getElementById('step-back-btn');
+  const cancelBtn = document.getElementById('step-cancel-btn');
+  const skipBtn = document.getElementById('step-skip-btn');
+  const nextBtn = document.getElementById('step-next-btn');
+  if(backBtn)   backBtn.addEventListener('click', prevStep);
+  if(cancelBtn) cancelBtn.addEventListener('click', cancelWizard);
+  if(skipBtn)   skipBtn.addEventListener('click', nextStep);
+  if(nextBtn)   nextBtn.addEventListener('click', ()=>nextStepFromInput(step.key, !!step.optional));
+
+  // Opt buttons use event delegation on card
+  if(step.type==='select'){
+    card.addEventListener('click', function optHandler(e){
+      const btn = e.target.closest('.opt-btn');
+      if(!btn) return;
+      const val = btn.dataset.val;
+      if(val !== undefined){ card.removeEventListener('click', optHandler); setStepValue(step.key, val); }
+    });
+  }
+
   if(step.type!=='select'){
     const input = document.getElementById('step-input');
-    input.focus();
-    if(step.type!=='textarea'){
-      input.addEventListener('keydown', e=>{
-        if(e.key==='Enter') nextStepFromInput(step.key, step.optional);
-      });
+    if(input){
+      input.focus();
+      if(step.type!=='textarea'){
+        input.addEventListener('keydown', e=>{
+          if(e.key==='Enter') nextStepFromInput(step.key, !!step.optional);
+        });
+      }
     }
   }
 }
@@ -1130,7 +1178,7 @@ function renderPhotoStep(){
   let slots = '';
   for(let i=0;i<3;i++){
     if(photos[i]){
-      slots += `<div class="photo-slot"><img src="${photos[i]}"><button class="photo-remove" onclick="removePhoto(${i})">&times;</button></div>`;
+      slots += `<div class="photo-slot"><img src="${photos[i]}"><button class="photo-remove" data-idx="${i}">&times;</button></div>`;
     } else {
       slots += `<div class="photo-slot">No Photo ${i+1}</div>`;
     }
@@ -1143,16 +1191,23 @@ function renderPhotoStep(){
     <div class="wizard-bar"><div class="wizard-bar-fill" style="width:100%"></div></div>
     <div class="step-question">Upload Inspection Photos</div>
     <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">Up to 3 photos. Optional, and can be added later from the Project Log.</div>
-    <div class="photo-grid">${slots}</div>
-    <label class="upload-label">
+    <div class="photo-grid" id="photo-grid-slots">${slots}</div>
+    <label class="upload-label" id="photo-upload-label">
       &#128247; Add Photo${photos.length>=3?' (max reached)':''}
-      <input type="file" accept="image/*" ${photos.length>=3?'disabled':''} onchange="handlePhotoUpload(event)">
+      <input id="photo-file-input" type="file" accept="image/*" ${photos.length>=3?'disabled':''}>
     </label>
     <div class="btn-row" style="margin-top:14px;">
-      <button class="btn" onclick="prevStep()">Back</button>
-      <button class="btn btn-primary" onclick="goToReview()">Continue</button>
+      <button class="btn" id="photo-back-btn">Back</button>
+      <button class="btn btn-primary" id="photo-continue-btn">Continue</button>
     </div>
   `;
+  document.getElementById('photo-back-btn').addEventListener('click', prevStep);
+  document.getElementById('photo-continue-btn').addEventListener('click', goToReview);
+  document.getElementById('photo-file-input').addEventListener('change', handlePhotoUpload);
+  document.getElementById('photo-grid-slots').addEventListener('click', function(e){
+    const btn = e.target.closest('.photo-remove');
+    if(btn){ removePhoto(parseInt(btn.dataset.idx)); }
+  });
 }
 
 function handlePhotoUpload(e){
@@ -1208,12 +1263,12 @@ function renderReview(){
     let val = d[s.key] || (s.optional ? '&mdash;' : '');
     if(s.type==='textarea' && val) val = String(val).replace(/\n/g,'<br>');
     return `<tr>
-      <td>${s.label} <span class="edit-link" onclick="jumpToStep(${idx})">Edit</span></td>
+      <td>${s.label} <span class="edit-link" data-action="jump" data-idx="${idx}">Edit</span></td>
       <td>${val}</td>
     </tr>`;
   }).join('');
 
-  const photoThumbs = (wizard.photos||[]).map((p,i)=>`<div class="photo-slot"><img src="${p}"><button class="photo-remove" onclick="removePhoto(${i});renderReview()">&times;</button></div>`).join('');
+  const photoThumbs = (wizard.photos||[]).map((p,i)=>`<div class="photo-slot"><img src="${p}"><button class="photo-remove" data-action="removephoto" data-idx="${i}">&times;</button></div>`).join('');
   const emptySlots = 3-(wizard.photos||[]).length;
   let extraSlots='';
   for(let i=0;i<emptySlots;i++) extraSlots += `<div class="photo-slot">No Photo</div>`;
@@ -1222,14 +1277,25 @@ function renderReview(){
     <h2>Review Inspection <small>before submitting</small></h2>
     <table class="review-table">${rows}</table>
     <div style="margin:14px 0 8px;font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Photos (${(wizard.photos||[]).length}/3)
-      <span class="edit-link" onclick="renderPhotoStep()">Edit</span>
+      <span class="edit-link" data-action="editphotos">Edit</span>
     </div>
     <div class="photo-grid">${photoThumbs}${extraSlots}</div>
     <div class="btn-row" style="margin-top:14px;">
-      <button class="btn" onclick="cancelWizard()">Cancel</button>
-      <button class="btn btn-gold" onclick="submitInspection()">Submit & Download Report</button>
+      <button class="btn" data-action="cancel">Cancel</button>
+      <button class="btn btn-gold" data-action="submit">Submit &amp; Save Inspection</button>
     </div>
   `;
+
+  card.addEventListener('click', function reviewHandler(e){
+    const el = e.target.closest('[data-action]');
+    if(!el) return;
+    const action = el.dataset.action;
+    if(action==='submit')      { card.removeEventListener('click', reviewHandler); submitInspection(); }
+    if(action==='cancel')      { card.removeEventListener('click', reviewHandler); cancelWizard(); }
+    if(action==='editphotos')  { renderPhotoStep(); }
+    if(action==='jump')        { jumpToStep(parseInt(el.dataset.idx)); }
+    if(action==='removephoto') { removePhoto(parseInt(el.dataset.idx)); renderReview(); }
+  });
 }
 
 function jumpToStep(idx){
@@ -1704,15 +1770,29 @@ function renderLog(){
       ${cells}
       <td>
         <div class="actions-cell">
-          <button class="btn btn-outline" onclick="editRecord('${r._id}')">Edit</button>
-          <button class="btn btn-outline" onclick="openReport(records.find(rec=>rec._id==='${r._id}'))">Open</button>
-          <button class="btn btn-outline" onclick="copyReportLink(records.find(rec=>rec._id==='${r._id}'))">Copy Link</button>
-          <button class="btn btn-outline" onclick="regenerateReport('${r._id}')">Download</button>
-          <button class="btn btn-danger" onclick="deleteRecord('${r._id}')">Del</button>
+          <button class="btn btn-outline" data-action="edit" data-id="${r._id}">Edit</button>
+          <button class="btn btn-outline" data-action="open" data-id="${r._id}">Open</button>
+          <button class="btn btn-outline" data-action="copylink" data-id="${r._id}">Copy Link</button>
+          <button class="btn btn-outline" data-action="download" data-id="${r._id}">Download</button>
+          <button class="btn btn-danger" data-action="delete" data-id="${r._id}">Del</button>
         </div>
       </td>
     </tr>`;
   }).join('');
+
+  // Event delegation for all log table buttons — avoids inline onclick CSP issues
+  body.addEventListener('click', function logHandler(e){
+    const btn = e.target.closest('[data-action]');
+    if(!btn) return;
+    const action = btn.dataset.action;
+    const id = btn.dataset.id;
+    const rec = records.find(r=>r._id===id);
+    if(action==='edit')        editRecord(id);
+    if(action==='open'     && rec) openReport(rec);
+    if(action==='copylink' && rec) copyReportLink(rec);
+    if(action==='download')    regenerateReport(id);
+    if(action==='delete')      deleteRecord(id);
+  });
 }
 
 function editRecord(id){
