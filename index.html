@@ -434,7 +434,7 @@
    Storage: localStorage (key: fsd_records_v1)
    ========================================================= */
 
-const APP_VERSION = 'v2.6';
+const APP_VERSION = 'v2.7';
 
 const STORAGE_KEY = 'fsd_records_v1';
 const HOSPITALS_KEY = 'fsd_hospitals_v1';
@@ -1359,7 +1359,7 @@ function generateReportHTML(record){
 
   const field = (label, value) => `
     <div class="f">
-      <div class="flabel">${label}</div>
+      <span class="flabel">${label}</span>
       <div class="fbox">${value ? escapeHtml(value) : ''}</div>
     </div>`;
 
@@ -1367,7 +1367,7 @@ function generateReportHTML(record){
     <div class="photobox">${src ? `<img src="${src}" alt="Inspection photo">` : ''}</div>`;
 
   const motorTypeField = record.actuatorType==='Electric'
-    ? `<div class="f"><div class="flabel small">Type of Motor:</div><div class="fbox" style="width:130px;">${escapeHtml(record.motorType||'')}</div></div>`
+    ? `<div class="f"><span class="flabel sm">Type of Motor:</span><div class="fbox">${escapeHtml(record.motorType||'')}</div></div>`
     : '';
 
   const hospitalObj = getHospital(record.hospitalId);
@@ -1382,38 +1382,37 @@ function generateReportHTML(record){
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(record.damperId)} — Fire Damper Inspection</title>
 <style>
-  *{box-sizing:border-box;}
-  body{margin:0;padding:24px;background:#fff;color:#111;
-    font-family:Arial,Helvetica,sans-serif;font-size:14px;}
-  .sheet{max-width:1000px;margin:0 auto;}
-  .logo-wrap{text-align:center;margin-bottom:6px;}
-  .logo-wrap img{max-width:280px;width:100%;height:auto;}
-  .subtitle{text-align:center;font-size:18px;font-weight:bold;margin:6px 0 4px;}
-  .location-line{text-align:center;font-size:13px;color:#555;margin:0 0 24px;}
-  .columns{display:flex;gap:24px;flex-wrap:wrap;}
-  .col{flex:1;min-width:220px;}
-  .col-photos{flex:1;min-width:220px;display:flex;flex-direction:column;gap:14px;}
-  .f{margin-bottom:14px;}
-  .flabel{font-weight:bold;text-decoration:underline;margin-bottom:4px;font-size:13px;}
-  .flabel.small{font-size:11px;}
-  .fbox{background:#eef1fd;border:1px solid #888;border-radius:2px;
-    padding:8px 10px;min-height:20px;font-size:13px;}
-  .section-label{font-weight:bold;text-decoration:underline;margin-bottom:10px;font-size:13px;}
-  .test-box{border:2px solid ${resultColor};}
-  .photobox{border:1.5px solid #222;border-radius:2px;min-height:140px;
-    display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fafafa;}
-  .photobox img{width:100%;height:100%;object-fit:cover;}
-  .notes-section{margin-top:24px;}
-  .notes-box{background:#eef1fd;border:1px solid #888;border-radius:2px;
-    min-height:140px;padding:10px;white-space:pre-wrap;font-size:13px;}
-  .signature-row{display:flex;gap:40px;margin-top:30px;font-size:12px;color:#555;flex-wrap:wrap;}
-  .signature-row span{border-bottom:1px solid #999;padding-bottom:4px;flex:1;min-width:200px;}
-  .extra-photo-section{margin-top:24px;}
-  .extra-photo-section h3{font-size:14px;text-decoration:underline;}
-  .meta-footer{margin-top:30px;font-size:11px;color:#999;text-align:center;}
-  @media (max-width:700px){
-    .columns{flex-direction:column;}
-  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;font-size:13px;padding:16px;}
+  .sheet{max-width:900px;margin:0 auto;}
+  .logo-wrap{text-align:center;margin-bottom:4px;}
+  .logo-wrap img{max-width:240px;width:60%;height:auto;}
+  .subtitle{text-align:center;font-size:16px;font-weight:bold;margin:4px 0 2px;}
+  .location-line{text-align:center;font-size:12px;color:#555;margin:0 0 14px;}
+  /* Fixed 3-column table layout — never collapses on mobile */
+  .grid{display:table;width:100%;border-collapse:separate;border-spacing:12px 0;}
+  .col{display:table-cell;vertical-align:top;width:33.33%;}
+  .f{margin-bottom:10px;}
+  .flabel{font-weight:bold;text-decoration:underline;margin-bottom:3px;font-size:12px;display:block;}
+  .flabel.sm{font-size:10px;}
+  .fbox{background:#eef1fd;border:1px solid #999;border-radius:2px;
+    padding:6px 8px;min-height:22px;font-size:12px;word-break:break-word;}
+  .section-label{font-weight:bold;text-decoration:underline;margin-bottom:8px;font-size:12px;display:block;}
+  .test-box{border:2px solid ${resultColor};font-weight:bold;}
+  /* Photos — fixed height so they never blow up */
+  .photobox{border:1.5px solid #333;border-radius:2px;height:130px;
+    overflow:hidden;background:#f8f8f8;margin-bottom:10px;display:block;}
+  .photobox img{width:100%;height:100%;object-fit:cover;display:block;}
+  .photobox.empty{background:#f8f8f8;}
+  .notes-section{margin-top:16px;}
+  .notes-label{font-weight:bold;text-decoration:underline;font-size:12px;margin-bottom:4px;display:block;}
+  .notes-box{background:#eef1fd;border:1px solid #999;border-radius:2px;
+    min-height:100px;padding:8px;white-space:pre-wrap;font-size:12px;}
+  .sig-row{display:table;width:100%;margin-top:20px;}
+  .sig-cell{display:table-cell;width:50%;padding-right:20px;}
+  .sig-line{border-bottom:1px solid #999;height:24px;margin-top:4px;}
+  .sig-label{font-size:11px;color:#555;}
+  .meta{margin-top:16px;font-size:10px;color:#aaa;text-align:center;}
 </style>
 </head>
 <body>
@@ -1422,7 +1421,7 @@ function generateReportHTML(record){
   <div class="subtitle">Fire Damper Inspection</div>
   ${locationLine ? `<div class="location-line">${locationLine}</div>` : ''}
 
-  <div class="columns">
+  <div class="grid">
     <div class="col">
       ${field('Date of Inspection:', record.dateTested)}
       ${field('Damper Name:', record.damperId)}
@@ -1430,46 +1429,46 @@ function generateReportHTML(record){
       ${field('Equipment Name:', record.equipmentName)}
       ${field('Damper Type:', record.damperType)}
       ${field('Angle Ring:', record.angleRing)}
-      <div class="f"><div class="flabel small">Notes:</div><div class="fbox" style="min-height:34px;"></div></div>
+      <div class="f"><span class="flabel sm">Notes:</span><div class="fbox" style="min-height:40px;"></div></div>
       ${field('Actuator Type:', record.actuatorType)}
       ${motorTypeField}
       ${field('Indicator Light:', record.indicatorLight)}
     </div>
 
     <div class="col">
-      <div class="section-label">Damper Location</div>
+      <span class="section-label">Damper Location</span>
       ${field('Room Name:', record.roomName)}
       ${field('Room Number:', record.roomNumber)}
       ${field('Floor:', record.floor)}
     </div>
 
-    <div class="col-photos">
+    <div class="col">
       ${field('Damper Size:', record.damperSize)}
       ${field('Installed In:', record.installedIn)}
       ${field('Requires Shutdown?', record.requiresShutdown)}
       ${field('Critical Area?', record.criticalArea)}
-      <div class="f"><div class="flabel">Test:</div><div class="fbox test-box">${escapeHtml(record.testResult||'')}</div></div>
-      ${photoBox(photos[0])}
-      ${photoBox(photos[1])}
-      ${photos[2] ? photoBox(photos[2]) : ''}
+      <div class="f"><span class="flabel">Test:</span><div class="fbox test-box">${escapeHtml(record.testResult||'')}</div></div>
+      ${photos[0] ? `<div class="photobox"><img src="${photos[0]}" alt="Photo 1"></div>` : '<div class="photobox empty"></div>'}
+      ${photos[1] ? `<div class="photobox"><img src="${photos[1]}" alt="Photo 2"></div>` : '<div class="photobox empty"></div>'}
+      ${photos[2] ? `<div class="photobox"><img src="${photos[2]}" alt="Photo 3"></div>` : ''}
     </div>
   </div>
 
   <div class="notes-section">
-    <div class="section-label">Notes:</div>
+    <span class="notes-label">Notes:</span>
     <div class="notes-box">${escapeHtml(record.notes||'')}</div>
   </div>
 
-  <div class="signature-row">
-    <span>Inspector Name:</span>
-    <span>Signature:</span>
+  <div class="sig-row">
+    <div class="sig-cell"><span class="sig-label">Inspector Name:</span><div class="sig-line"></div></div>
+    <div class="sig-cell"><span class="sig-label">Signature:</span><div class="sig-line"></div></div>
   </div>
 
-  <div class="meta-footer">Report generated ${new Date().toLocaleString()} &middot; Damper ID: ${escapeHtml(record.damperId)} &middot; FSD-SYS ${APP_VERSION}</div>
+  <div class="meta">Generated ${new Date().toLocaleString()} &middot; Damper: ${escapeHtml(record.damperId)} &middot; ${APP_VERSION}</div>
 </div>
 </body>
-</html>`;
-}
+</html>`;}
+
 
 function escapeHtml(str){
   if(str===undefined || str===null) return '';
