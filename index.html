@@ -434,7 +434,7 @@
    Storage: localStorage (key: fsd_records_v1)
    ========================================================= */
 
-const APP_VERSION = 'v2.5';
+const APP_VERSION = 'v2.6';
 
 const STORAGE_KEY = 'fsd_records_v1';
 const HOSPITALS_KEY = 'fsd_hospitals_v1';
@@ -1370,6 +1370,7 @@ function generateReportHTML(record){
     ? `<div class="f"><div class="flabel small">Type of Motor:</div><div class="fbox" style="width:130px;">${escapeHtml(record.motorType||'')}</div></div>`
     : '';
 
+  const hospitalObj = getHospital(record.hospitalId);
   const hospitalName = hospitalObj ? escapeHtml(hospitalObj.name) : '';
   const subFolderName = record.subFolder ? escapeHtml(record.subFolder) : '';
   const locationLine = [hospitalName, subFolderName].filter(Boolean).join(' &middot; ');
