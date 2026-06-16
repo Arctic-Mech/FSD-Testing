@@ -213,7 +213,7 @@
 
   .empty{text-align:center;color:var(--text-dim);padding:40px 20px;font-size:13px;}
 
-  .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  .toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);
     background:var(--navy);color:#fff;padding:10px 20px;border-radius:8px;
     font-weight:700;font-size:13px;z-index:200;opacity:0;transition:opacity .3s;
     pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(26,35,126,0.3);}
@@ -434,7 +434,7 @@
    Storage: Firebase Firestore + Storage (primary) + localStorage (cache)
    ========================================================= */
 
-const APP_VERSION = 'v3.1';
+const APP_VERSION = 'v3.2';
 
 const STORAGE_KEY = 'fsd_records_v1';
 const HOSPITALS_KEY = 'fsd_hospitals_v1';
@@ -1084,7 +1084,7 @@ function renderIdEntry(){
     <h2>Begin Inspection</h2>
     <label>Damper Name / ID</label>
     <div class="id-search-wrap">
-      <input type="text" id="entry-damper-id" placeholder="e.g. FSD-101 or scan/type ID" autocomplete="off">
+      <input type="text" id="entry-damper-id" placeholder="Type Damper ID to begin..." autocomplete="off" style="font-size:18px;">
       <div class="id-suggest" id="id-suggest" style="display:none;"></div>
     </div>
     <div style="margin-top:14px;font-size:12px;color:var(--text-dim);">
@@ -1131,8 +1131,17 @@ function selectExistingId(id){
 }
 
 function beginWizard(){
-  const id = document.getElementById('entry-damper-id').value.trim();
-  if(!id){ showToast('Enter a Damper Name / ID'); return; }
+  const inputEl = document.getElementById('entry-damper-id');
+  const id = inputEl ? inputEl.value.trim() : '';
+  if(!id){
+    showToast('Enter a Damper Name / ID first');
+    if(inputEl){
+      inputEl.style.borderColor = 'var(--red)';
+      inputEl.focus();
+      setTimeout(()=>{ inputEl.style.borderColor = ''; }, 2000);
+    }
+    return;
+  }
   const existing = recordsInScope().find(r=>r.damperId===id);
   if(existing){
     selectExistingId(id);
@@ -1143,7 +1152,7 @@ function beginWizard(){
       damperId: id,
       dateTested: todayStr(),
       hospitalId: currentHospitalId,
-      subFolder: currentSubFolder || undefined // pre-fill if a building is already selected
+      subFolder: currentSubFolder || undefined
     },
     step: 1,
     photos: [],
