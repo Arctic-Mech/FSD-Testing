@@ -434,7 +434,7 @@
    Storage: Firebase Firestore + Storage (primary) + localStorage (cache)
    ========================================================= */
 
-const APP_VERSION = 'v3.0';
+const APP_VERSION = 'v3.1';
 
 const STORAGE_KEY = 'fsd_records_v1';
 const HOSPITALS_KEY = 'fsd_hospitals_v1';
@@ -1087,21 +1087,22 @@ function renderIdEntry(){
       <input type="text" id="entry-damper-id" placeholder="e.g. FSD-101 or scan/type ID" autocomplete="off">
       <div class="id-suggest" id="id-suggest" style="display:none;"></div>
     </div>
-    <button class="btn btn-primary" id="begin-inspection-btn">Begin Inspection</button>
     <div style="margin-top:14px;font-size:12px;color:var(--text-dim);">
       Existing dampers can be re-opened from the Project Log to edit or add photos.
     </div>
   `;
+
   const input = document.getElementById('entry-damper-id');
   const suggest = document.getElementById('id-suggest');
 
-  // Attach to card (persistent element) not the dynamic button, to survive re-renders
-  card.addEventListener('click', function idEntryHandler(e){
-    if(e.target.closest('#begin-inspection-btn') || e.target.id==='begin-inspection-btn'){
-      card.removeEventListener('click', idEntryHandler);
-      beginWizard();
-    }
-  });
+  // Create button in JS and attach listener directly — avoids any CSP/onclick issues
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-primary';
+  btn.textContent = 'Begin Inspection';
+  btn.style.marginTop = '10px';
+  btn.addEventListener('click', beginWizard);
+  card.querySelector('.id-search-wrap').insertAdjacentElement('afterend', btn);
+
   input.addEventListener('keydown', e=>{ if(e.key==='Enter') beginWizard(); });
   input.addEventListener('input', ()=>{
     const val = input.value.trim().toLowerCase();
@@ -1163,37 +1164,13 @@ function renderStep(){
   const card = document.getElementById('inspect-card');
   const step = STEPS[wizard.step];
 
-  if(!step){
-    renderPhotoStep();
-    return;
-  }
-
-  // skip steps whose showIf condition isn't met, or dynamic-option steps with no options
-  if(shouldSkipStep(step)){
-    nextStep();
-    return;
-  }
+  if(!step){ renderPhotoStep(); return; }
+  if(shouldSkipStep(step)){ nextStep(); return; }
 
   const stepOptions = step.dynamicOptions ? step.dynamicOptions() : (step.options || []);
-
   const progressPct = Math.round((wizard.step/STEPS.length)*100);
-  let body = '';
 
-  if(step.type==='select'){
-    body = `<div class="opt-grid">` + stepOptions.map(opt=>{
-      const selected = wizard.data[step.key]===opt ? 'selected' : '';
-      return `<button class="opt-btn ${selected}" data-val="${escapeJs(opt)}">
-                <span>${opt}</span><span class="chk">${selected?'&#10003;':''}</span>
-              </button>`;
-    }).join('') + `</div>`;
-  } else if(step.type==='date'){
-    body = `<input type="date" id="step-input" value="${wizard.data[step.key]||todayStr()}">`;
-  } else if(step.type==='textarea'){
-    body = `<textarea id="step-input" rows="6" placeholder="Enter ${step.label.toLowerCase()}">${wizard.data[step.key]||''}</textarea>`;
-  } else {
-    body = `<input type="text" id="step-input" value="${wizard.data[step.key]||''}" placeholder="Enter ${step.label.toLowerCase()}" autocomplete="off">`;
-  }
-
+  // Build static HTML (no buttons — we'll append those via JS)
   card.innerHTML = `
     <div class="wizard-progress">
       <span>STEP ${wizard.step+1} / ${STEPS.length}</span>
@@ -1201,45 +1178,71 @@ function renderStep(){
     </div>
     <div class="wizard-bar"><div class="wizard-bar-fill" style="width:${progressPct}%"></div></div>
     <div class="step-question">${step.label}</div>
-    ${body}
-    <div class="btn-row" style="margin-top:14px;">
-      ${wizard.step>0 ? '<button class="btn" id="step-back-btn">Back</button>' : '<button class="btn" id="step-cancel-btn">Cancel</button>'}
-      ${step.type==='select' && step.optional ? '<button class="btn" id="step-skip-btn">Skip</button>' : ''}
-      ${step.type!=='select' ? `<button class="btn btn-primary" id="step-next-btn">${step.optional?'Next (or skip)':'Next'}</button>` : ''}
-    </div>
+    <div id="step-body"></div>
+    <div class="btn-row" id="step-btn-row" style="margin-top:14px;"></div>
   `;
 
-  // Attach listeners — no inline onclick needed (avoids GitHub Pages CSP blocks)
-  const backBtn = document.getElementById('step-back-btn');
-  const cancelBtn = document.getElementById('step-cancel-btn');
-  const skipBtn = document.getElementById('step-skip-btn');
-  const nextBtn = document.getElementById('step-next-btn');
-  if(backBtn)   backBtn.addEventListener('click', prevStep);
-  if(cancelBtn) cancelBtn.addEventListener('click', cancelWizard);
-  if(skipBtn)   skipBtn.addEventListener('click', nextStep);
-  if(nextBtn)   nextBtn.addEventListener('click', ()=>nextStepFromInput(step.key, !!step.optional));
+  const bodyEl = document.getElementById('step-body');
+  const btnRow = document.getElementById('step-btn-row');
 
-  // Opt buttons use event delegation on card
+  // Build input/options inside bodyEl
   if(step.type==='select'){
-    card.addEventListener('click', function optHandler(e){
-      const btn = e.target.closest('.opt-btn');
-      if(!btn) return;
-      const val = btn.dataset.val;
-      if(val !== undefined){ card.removeEventListener('click', optHandler); setStepValue(step.key, val); }
+    stepOptions.forEach(opt=>{
+      const btn = document.createElement('button');
+      const selected = wizard.data[step.key]===opt;
+      btn.className = 'opt-btn' + (selected?' selected':'');
+      btn.innerHTML = `<span>${opt}</span><span class="chk">${selected?'&#10003;':''}</span>`;
+      btn.addEventListener('click', ()=>setStepValue(step.key, opt));
+      bodyEl.appendChild(btn);
     });
+    bodyEl.style.display = 'grid';
+    bodyEl.style.gap = '8px';
+  } else if(step.type==='date'){
+    const inp = document.createElement('input');
+    inp.type = 'date';
+    inp.id = 'step-input';
+    inp.value = wizard.data[step.key] || todayStr();
+    inp.addEventListener('keydown', e=>{ if(e.key==='Enter') nextStepFromInput(step.key, !!step.optional); });
+    bodyEl.appendChild(inp);
+    inp.focus();
+  } else if(step.type==='textarea'){
+    const ta = document.createElement('textarea');
+    ta.id = 'step-input';
+    ta.rows = 6;
+    ta.placeholder = `Enter ${step.label.toLowerCase()}`;
+    ta.value = wizard.data[step.key] || '';
+    bodyEl.appendChild(ta);
+    ta.focus();
+  } else {
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.id = 'step-input';
+    inp.value = wizard.data[step.key] || '';
+    inp.placeholder = `Enter ${step.label.toLowerCase()}`;
+    inp.autocomplete = 'off';
+    inp.addEventListener('keydown', e=>{ if(e.key==='Enter') nextStepFromInput(step.key, !!step.optional); });
+    bodyEl.appendChild(inp);
+    inp.focus();
   }
 
-  if(step.type!=='select'){
-    const input = document.getElementById('step-input');
-    if(input){
-      input.focus();
-      if(step.type!=='textarea'){
-        input.addEventListener('keydown', e=>{
-          if(e.key==='Enter') nextStepFromInput(step.key, !!step.optional);
-        });
-      }
-    }
+  // Navigation buttons
+  const backBtn = mkBtn(wizard.step>0 ? 'Back' : 'Cancel', 'btn', wizard.step>0 ? prevStep : cancelWizard);
+  btnRow.appendChild(backBtn);
+  if(step.type==='select' && step.optional){
+    btnRow.appendChild(mkBtn('Skip', 'btn', nextStep));
   }
+  if(step.type!=='select'){
+    btnRow.appendChild(mkBtn(step.optional?'Next (or skip)':'Next', 'btn btn-primary', ()=>nextStepFromInput(step.key, !!step.optional)));
+  }
+}
+
+// Helper: create a button element with a click handler
+function mkBtn(label, className, handler){
+  const btn = document.createElement('button');
+  btn.className = className;
+  btn.textContent = label;
+  btn.addEventListener('click', handler);
+  return btn;
 }
 
 function escapeJs(str){
@@ -1290,39 +1293,70 @@ function cancelWizard(){
 function renderPhotoStep(){
   const card = document.getElementById('inspect-card');
   const photos = wizard.photos || [];
-  let slots = '';
+  card.innerHTML = '';
+
+  // Progress
+  const prog = document.createElement('div');
+  prog.className = 'wizard-progress';
+  prog.innerHTML = `<span>PHOTOS</span><span>${wizard.data.damperId||''}</span>`;
+  card.appendChild(prog);
+  const bar = document.createElement('div');
+  bar.className = 'wizard-bar';
+  bar.innerHTML = '<div class="wizard-bar-fill" style="width:100%"></div>';
+  card.appendChild(bar);
+
+  const q = document.createElement('div');
+  q.className = 'step-question';
+  q.textContent = 'Upload Inspection Photos';
+  card.appendChild(q);
+
+  const hint = document.createElement('div');
+  hint.style.cssText = 'font-size:12px;color:var(--text-dim);margin-bottom:12px;';
+  hint.textContent = 'Up to 3 photos. Optional, can be added later from the Project Log.';
+  card.appendChild(hint);
+
+  // Photo grid
+  const grid = document.createElement('div');
+  grid.className = 'photo-grid';
   for(let i=0;i<3;i++){
+    const slot = document.createElement('div');
+    slot.className = 'photo-slot';
     if(photos[i]){
-      slots += `<div class="photo-slot"><img src="${photos[i]}"><button class="photo-remove" data-idx="${i}">&times;</button></div>`;
+      const img = document.createElement('img');
+      img.src = photos[i];
+      slot.appendChild(img);
+      const rm = document.createElement('button');
+      rm.className = 'photo-remove';
+      rm.textContent = '×';
+      rm.addEventListener('click', ()=>{ removePhoto(i); });
+      slot.appendChild(rm);
     } else {
-      slots += `<div class="photo-slot">No Photo ${i+1}</div>`;
+      slot.textContent = `No Photo ${i+1}`;
     }
+    grid.appendChild(slot);
   }
-  card.innerHTML = `
-    <div class="wizard-progress">
-      <span>PHOTOS</span>
-      <span>${wizard.data.damperId || ''}</span>
-    </div>
-    <div class="wizard-bar"><div class="wizard-bar-fill" style="width:100%"></div></div>
-    <div class="step-question">Upload Inspection Photos</div>
-    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">Up to 3 photos. Optional, and can be added later from the Project Log.</div>
-    <div class="photo-grid" id="photo-grid-slots">${slots}</div>
-    <label class="upload-label" id="photo-upload-label">
-      &#128247; Add Photo${photos.length>=3?' (max reached)':''}
-      <input id="photo-file-input" type="file" accept="image/*" ${photos.length>=3?'disabled':''}>
-    </label>
-    <div class="btn-row" style="margin-top:14px;">
-      <button class="btn" id="photo-back-btn">Back</button>
-      <button class="btn btn-primary" id="photo-continue-btn">Continue</button>
-    </div>
-  `;
-  document.getElementById('photo-back-btn').addEventListener('click', prevStep);
-  document.getElementById('photo-continue-btn').addEventListener('click', goToReview);
-  document.getElementById('photo-file-input').addEventListener('change', handlePhotoUpload);
-  document.getElementById('photo-grid-slots').addEventListener('click', function(e){
-    const btn = e.target.closest('.photo-remove');
-    if(btn){ removePhoto(parseInt(btn.dataset.idx)); }
-  });
+  card.appendChild(grid);
+
+  // Upload label
+  const label = document.createElement('label');
+  label.className = 'upload-label';
+  label.textContent = photos.length>=3 ? '📷 Max photos reached' : '📷 Add Photo';
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/*';
+  fileInput.style.display = 'none';
+  if(photos.length>=3) fileInput.disabled = true;
+  fileInput.addEventListener('change', handlePhotoUpload);
+  label.appendChild(fileInput);
+  card.appendChild(label);
+
+  // Buttons
+  const btnRow = document.createElement('div');
+  btnRow.className = 'btn-row';
+  btnRow.style.marginTop = '14px';
+  btnRow.appendChild(mkBtn('Back', 'btn', prevStep));
+  btnRow.appendChild(mkBtn('Continue', 'btn btn-primary', goToReview));
+  card.appendChild(btnRow);
 }
 
 function handlePhotoUpload(e){
@@ -1373,44 +1407,75 @@ function goToReview(){
 function renderReview(){
   const card = document.getElementById('inspect-card');
   const d = wizard.data;
-  const rows = STEPS.filter(s=>!shouldSkipStep(s)).map((s)=>{
+  card.innerHTML = '';
+
+  // Title
+  const title = document.createElement('h2');
+  title.innerHTML = 'Review Inspection <small>before submitting</small>';
+  card.appendChild(title);
+
+  // Field table
+  const table = document.createElement('table');
+  table.className = 'review-table';
+  STEPS.filter(s=>!shouldSkipStep(s)).forEach(s=>{
     const idx = STEPS.indexOf(s);
-    let val = d[s.key] || (s.optional ? '&mdash;' : '');
-    if(s.type==='textarea' && val) val = String(val).replace(/\n/g,'<br>');
-    return `<tr>
-      <td>${s.label} <span class="edit-link" data-action="jump" data-idx="${idx}">Edit</span></td>
-      <td>${val}</td>
-    </tr>`;
-  }).join('');
-
-  const photoThumbs = (wizard.photos||[]).map((p,i)=>`<div class="photo-slot"><img src="${p}"><button class="photo-remove" data-action="removephoto" data-idx="${i}">&times;</button></div>`).join('');
-  const emptySlots = 3-(wizard.photos||[]).length;
-  let extraSlots='';
-  for(let i=0;i<emptySlots;i++) extraSlots += `<div class="photo-slot">No Photo</div>`;
-
-  card.innerHTML = `
-    <h2>Review Inspection <small>before submitting</small></h2>
-    <table class="review-table">${rows}</table>
-    <div style="margin:14px 0 8px;font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Photos (${(wizard.photos||[]).length}/3)
-      <span class="edit-link" data-action="editphotos">Edit</span>
-    </div>
-    <div class="photo-grid">${photoThumbs}${extraSlots}</div>
-    <div class="btn-row" style="margin-top:14px;">
-      <button class="btn" data-action="cancel">Cancel</button>
-      <button class="btn btn-gold" data-action="submit">Submit &amp; Save Inspection</button>
-    </div>
-  `;
-
-  card.addEventListener('click', function reviewHandler(e){
-    const el = e.target.closest('[data-action]');
-    if(!el) return;
-    const action = el.dataset.action;
-    if(action==='submit')      { card.removeEventListener('click', reviewHandler); submitInspection(); }
-    if(action==='cancel')      { card.removeEventListener('click', reviewHandler); cancelWizard(); }
-    if(action==='editphotos')  { renderPhotoStep(); }
-    if(action==='jump')        { jumpToStep(parseInt(el.dataset.idx)); }
-    if(action==='removephoto') { removePhoto(parseInt(el.dataset.idx)); renderReview(); }
+    let val = d[s.key] || (s.optional ? '—' : '');
+    const tr = document.createElement('tr');
+    const td1 = document.createElement('td');
+    td1.textContent = s.label + ' ';
+    const editLink = document.createElement('span');
+    editLink.className = 'edit-link';
+    editLink.textContent = 'Edit';
+    editLink.addEventListener('click', ()=>jumpToStep(idx));
+    td1.appendChild(editLink);
+    const td2 = document.createElement('td');
+    td2.textContent = val;
+    tr.appendChild(td1); tr.appendChild(td2);
+    table.appendChild(tr);
   });
+  card.appendChild(table);
+
+  // Photos header
+  const photoHdr = document.createElement('div');
+  photoHdr.style.cssText = 'margin:14px 0 8px;font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;';
+  photoHdr.textContent = `Photos (${(wizard.photos||[]).length}/3) `;
+  const editPhotos = document.createElement('span');
+  editPhotos.className = 'edit-link';
+  editPhotos.textContent = 'Edit';
+  editPhotos.addEventListener('click', renderPhotoStep);
+  photoHdr.appendChild(editPhotos);
+  card.appendChild(photoHdr);
+
+  // Photo grid
+  const grid = document.createElement('div');
+  grid.className = 'photo-grid';
+  const photos = wizard.photos || [];
+  for(let i=0;i<3;i++){
+    const slot = document.createElement('div');
+    slot.className = 'photo-slot';
+    if(photos[i]){
+      const img = document.createElement('img');
+      img.src = photos[i];
+      slot.appendChild(img);
+      const rm = document.createElement('button');
+      rm.className = 'photo-remove';
+      rm.textContent = '×';
+      rm.addEventListener('click', ()=>{ removePhoto(i); renderReview(); });
+      slot.appendChild(rm);
+    } else {
+      slot.textContent = 'No Photo';
+    }
+    grid.appendChild(slot);
+  }
+  card.appendChild(grid);
+
+  // Buttons
+  const btnRow = document.createElement('div');
+  btnRow.className = 'btn-row';
+  btnRow.style.marginTop = '14px';
+  btnRow.appendChild(mkBtn('Cancel', 'btn', cancelWizard));
+  btnRow.appendChild(mkBtn('Submit & Save Inspection', 'btn btn-gold', submitInspection));
+  card.appendChild(btnRow);
 }
 
 function jumpToStep(idx){
