@@ -434,7 +434,7 @@
    Storage: Firebase Firestore + Storage (primary) + localStorage (cache)
    ========================================================= */
 
-const APP_VERSION = 'v2.9';
+const APP_VERSION = 'v3.0';
 
 const STORAGE_KEY = 'fsd_records_v1';
 const HOSPITALS_KEY = 'fsd_hospitals_v1';
@@ -776,14 +776,6 @@ function renderSubFolderSelect(){
   if(!h){ list.innerHTML=''; return; }
 
   const subFolders = h.subFolders || [];
-  const allCount = records.filter(r=>r.hospitalId===currentHospitalId).length;
-
-  const allBtn = `
-    <button class="folder-btn" data-action="select-sf" data-sf="">
-      <span>All Buildings</span>
-      <span class="folder-count">${allCount} damper${allCount===1?'':'s'} &rsaquo;</span>
-    </button>`;
-
   const sfBtns = subFolders.map(sf=>{
     const count = records.filter(r=>r.hospitalId===currentHospitalId && r.subFolder===sf).length;
     return `
@@ -795,7 +787,7 @@ function renderSubFolderSelect(){
       </div>`;
   }).join('');
 
-  list.innerHTML = allBtn + sfBtns;
+  list.innerHTML = sfBtns;
 
   list.addEventListener('click', function(e){
     const btn = e.target.closest('[data-action="select-sf"]');
@@ -1102,7 +1094,14 @@ function renderIdEntry(){
   `;
   const input = document.getElementById('entry-damper-id');
   const suggest = document.getElementById('id-suggest');
-  document.getElementById('begin-inspection-btn').addEventListener('click', beginWizard);
+
+  // Attach to card (persistent element) not the dynamic button, to survive re-renders
+  card.addEventListener('click', function idEntryHandler(e){
+    if(e.target.closest('#begin-inspection-btn') || e.target.id==='begin-inspection-btn'){
+      card.removeEventListener('click', idEntryHandler);
+      beginWizard();
+    }
+  });
   input.addEventListener('keydown', e=>{ if(e.key==='Enter') beginWizard(); });
   input.addEventListener('input', ()=>{
     const val = input.value.trim().toLowerCase();
