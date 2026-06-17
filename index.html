@@ -434,7 +434,7 @@
    Storage: Firebase Firestore + Storage (primary) + localStorage (cache)
    ========================================================= */
 
-const APP_VERSION = 'v3.2';
+const APP_VERSION = 'v3.3';
 
 const STORAGE_KEY = 'fsd_records_v1';
 const HOSPITALS_KEY = 'fsd_hospitals_v1';
@@ -615,6 +615,32 @@ function saveRecords(){ saveRecordsLocal(); }
 function saveHospitals(){ saveHospitalsLocal(); }
 
 // ---- STEPS definition ----
+const STEPS = [
+  { key:'damperId',         label:'Damper Name / ID',      type:'text' },
+  { key:'subFolder',        label:'Sub-Folder / Building', type:'select', dynamicOptions:()=>getSubFolders(currentHospitalId), optional:true },
+  { key:'dateTested',       label:'Date Tested',           type:'date',   optional:true },
+  { key:'damperSize',       label:'Damper Size',           type:'text',   optional:true },
+  { key:'damperAlias',      label:'Damper Alias',          type:'text',   optional:true },
+  { key:'equipmentName',    label:'Equipment Name',        type:'text',   optional:true },
+  { key:'damperType',       label:'Damper Type',           type:'select', options:['Fire Smoke Damper','Fire Damper','Smoke Damper'], optional:true },
+  { key:'angleRing',        label:'Angle Ring',            type:'select', options:['Yes','No','N/A'], optional:true },
+  { key:'actuatorType',     label:'Actuator Type',         type:'select', options:['Electric','Gravity','Pneumatic','Spring','Shop Built'], optional:true },
+  { key:'motorType',        label:'Type of Motor',         type:'text',   optional:true, showIf:(d)=>d.actuatorType==='Electric' },
+  { key:'indicatorLight',   label:'Indicator Light',       type:'select', options:['Yes','No','N/A'], optional:true },
+  { key:'roomName',         label:'Room Name',             type:'text',   optional:true },
+  { key:'roomNumber',       label:'Room Number',           type:'text',   optional:true },
+  { key:'floor',            label:'Floor',                 type:'text',   optional:true },
+  { key:'installedIn',      label:'Installed In',          type:'select', options:['Supply','Return','Exhaust'], optional:true },
+  { key:'requiresShutdown', label:'Requires Shutdown',     type:'select', options:['Yes','No'], optional:true },
+  { key:'criticalArea',     label:'Critical Area',         type:'select', options:['Yes','No'], optional:true },
+  { key:'testResult',       label:'Test Result',           type:'select', options:['Pass','Fail','Decommissioned',"Can't Test"], optional:true },
+  { key:'notes',            label:'Notes',                 type:'textarea', optional:true },
+];
+
+const REQUIRED_FOR_COMPLETE = STEPS.filter(s=>
+  s.key!=='damperId' && s.key!=='notes' && s.key!=='damperAlias' && s.key!=='subFolder'
+).map(s=>s.key);
+
 function getHospital(id){
   return hospitals.find(h=>h.id===id);
 }
