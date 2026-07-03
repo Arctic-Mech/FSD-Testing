@@ -6,6 +6,7 @@
 <title>Arctic FSD Testing — Fire/Smoke Damper Inspection</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
     --bg:#f4f6fb;
@@ -392,6 +393,10 @@
         </div>
         <div class="btn-row">
           <button class="btn btn-outline" onclick="promptExportFormat()">Export Log</button>
+          <label class="btn btn-outline" id="import-zip-label" style="cursor:pointer;display:none;">
+            &#128194; Import Forms (ZIP)
+            <input type="file" accept=".zip,application/zip" style="display:none;" id="import-zip-input">
+          </label>
         </div>
       </div>
       <div class="log-table-wrap">
@@ -601,6 +606,7 @@ function startHospitalsListener(){
   db.collection('hospitals').onSnapshot(snap=>{
     hospitals = snap.docs.map(d=>({...d.data(), id:d.id}));
     saveHospitalsLocal();
+    ensureSeededHospitals(); // make sure Kaiser Sunnyside + Repairs building exist
     const hsEl = document.getElementById('view-hospital-select');
     const sfEl = document.getElementById('view-subfolder-select');
     const stEl = document.getElementById('view-settings');
@@ -709,6 +715,29 @@ function saveHospitalsLocal(){
 function saveRecords(){ saveRecordsLocal(); }
 function saveHospitals(){ saveHospitalsLocal(); }
 
+// Ensure the hardwired "Kaiser Sunnyside" hospital exists with the
+// "Repairs & Decommissions" building. Runs on startup and after cloud sync.
+// Only creates what's missing; never duplicates.
+function ensureSeededHospitals(){
+  let changed = false;
+  let kaiser = hospitals.find(h=>h.name==='Kaiser Sunnyside');
+  if(!kaiser){
+    kaiser = { id: 'kaiser_sunnyside_seed', name: 'Kaiser Sunnyside', subFolders: [] };
+    hospitals.push(kaiser);
+    changed = true;
+  }
+  if(!kaiser.subFolders) kaiser.subFolders = [];
+  if(!kaiser.subFolders.includes(REPAIR_BUILDING)){
+    kaiser.subFolders.push(REPAIR_BUILDING);
+    changed = true;
+  }
+  if(changed){
+    saveHospitals();
+    if(firebaseReady) fbSaveHospital(kaiser);
+  }
+  return changed;
+}
+
 // ---- STEPS definition ----
 const STEPS = [
   { key:'damperId',         label:'Damper Name / ID',      type:'text' },
@@ -729,8 +758,20 @@ const STEPS = [
   { key:'requiresShutdown', label:'Requires Shutdown',     type:'select', options:['Yes','No'], optional:true },
   { key:'criticalArea',     label:'Critical Area',         type:'select', options:['Yes','No'], optional:true },
   { key:'testResult',       label:'Test Result',           type:'select', options:['Pass','Fail','Decommissioned',"Can't Test"], optional:true },
+  { key:'repairMade',       label:'Repair Made',           type:'select', options:['Tabs','Motor','Access','Decommissioned','Replaced','Repaired'], optional:true, showIf:isRepairBuilding },
+  { key:'cochranScope',     label:'Cochran Scope',         type:'select', options:['Complete','Incomplete','N/A'], optional:true, showIf:isRepairBuilding },
+  { key:'fireAlarm',        label:'Fire Alarm',            type:'select', options:['Complete','Incomplete','N/A'], optional:true, showIf:isRepairBuilding },
+  { key:'climatechScope',   label:'Climatech Scope',       type:'select', options:['Complete','Incomplete','N/A'], optional:true, showIf:isRepairBuilding },
+  { key:'sizeMatchesSchedule', label:'If Decommissioned, Size Matches Schedule?', type:'select', options:['Yes','No','N/A'], optional:true, showIf:isRepairBuilding },
   { key:'notes',            label:'Notes',                 type:'textarea', optional:true },
 ];
+
+// The special building that uses the repair/decommission form variant.
+const REPAIR_BUILDING = 'Repairs & Decommissions';
+function isRepairBuilding(d){
+  const sf = (d && d.subFolder) || currentSubFolder;
+  return sf === REPAIR_BUILDING;
+}
 
 const REQUIRED_FOR_COMPLETE = STEPS.filter(s=>
   s.key!=='damperId' && s.key!=='notes' && s.key!=='damperAlias' && s.key!=='subFolder'
@@ -1879,6 +1920,18 @@ function generateReportHTML(record){
     </div>
   </div>
 
+  ${(record.repairMade||record.cochranScope||record.fireAlarm||record.climatechScope||record.sizeMatchesSchedule) ? `
+  <div class="repair-section" style="margin-top:14px;border:2px solid #c0392b;border-radius:4px;padding:10px;">
+    <div style="color:#c0392b;font-weight:700;text-align:center;margin-bottom:8px;font-size:14px;">Repair, Decommission &amp; Replace</div>
+    <table style="width:100%;display:table;">
+      <tr><td style="padding:3px 8px;font-weight:600;width:50%;">Repair Made:</td><td style="padding:3px 8px;">${escapeHtml(record.repairMade||'—')}</td></tr>
+      <tr><td style="padding:3px 8px;font-weight:600;">Cochran Scope:</td><td style="padding:3px 8px;">${escapeHtml(record.cochranScope||'—')}</td></tr>
+      <tr><td style="padding:3px 8px;font-weight:600;">Fire Alarm:</td><td style="padding:3px 8px;">${escapeHtml(record.fireAlarm||'—')}</td></tr>
+      <tr><td style="padding:3px 8px;font-weight:600;">Climatech Scope:</td><td style="padding:3px 8px;">${escapeHtml(record.climatechScope||'—')}</td></tr>
+      <tr><td style="padding:3px 8px;font-weight:600;">If Decommissioned, Size Matches Schedule?</td><td style="padding:3px 8px;">${escapeHtml(record.sizeMatchesSchedule||'—')}</td></tr>
+    </table>
+  </div>` : ''}
+
   <div class="notes-section">
     <span class="notes-label">Notes:</span>
     <div class="notes-box">${escapeHtml(record.notes||'')}</div>
@@ -2206,6 +2259,11 @@ const LOG_TABLE_COLUMNS = [
   ['Installed In','installedIn'],
   ['Shutdown','requiresShutdown'],
   ['Critical','criticalArea'],
+  ['Repair Made','repairMade'],
+  ['Cochran','cochranScope'],
+  ['Fire Alarm','fireAlarm'],
+  ['Climatech','climatechScope'],
+  ['Size Matches','sizeMatchesSchedule'],
   ['Photos','__photoCount'],
 ];
 
@@ -2241,6 +2299,10 @@ function renderActuatorChips(){
 
 function renderLog(){
   const scoped = recordsInScope();
+
+  // Show the ZIP-import button only when viewing the Repairs & Decommissions building
+  const importLabel = document.getElementById('import-zip-label');
+  if(importLabel) importLabel.style.display = (currentSubFolder === REPAIR_BUILDING) ? 'inline-block' : 'none';
 
   // If we arrived from a dashboard category click, apply that filter to the dropdown
   let untestedOnly = false;
@@ -2363,6 +2425,8 @@ function renderLog(){
     const cells = LOG_TABLE_COLUMNS.map(([h,key])=>{
       if(key==='__photoCount') return `<td>${(r.photos||[]).length}/${MAX_PHOTOS}</td>`;
       if(key==='__status'){
+        // Imported repair forms: incomplete specifically means Repair Made was blank
+        if(r.importComplete === false) return `<td><span class="badge fail" title="Repair Made not filled out">Incomplete</span></td>`;
         if(missing.length===0) return `<td><span class="badge pass">Complete</span></td>`;
         return `<td><span class="badge fail" title="Missing: ${missing.join(', ')}">${missing.length} missing</span></td>`;
       }
@@ -2451,6 +2515,11 @@ const EXPORT_COLUMNS = [
   ['Requires Shutdown','requiresShutdown'],
   ['Critical Area','criticalArea'],
   ['Test Result','testResult'],
+  ['Repair Made','repairMade'],
+  ['Cochran Scope','cochranScope'],
+  ['Fire Alarm','fireAlarm'],
+  ['Climatech Scope','climatechScope'],
+  ['Size Matches Schedule','sizeMatchesSchedule'],
   ['Notes','notes'],
   ['Photo Count','__photoCount'],
   ['Report URL','__pdfLink'],
@@ -2480,6 +2549,168 @@ function reportHashPath(record){
   if(record.subFolder) parts.push(encodeURIComponent(record.subFolder));
   parts.push(sanitizeFilename(record.damperId));
   return parts.join('/');
+}
+
+// =========================================================
+//  ZIP IMPORT — bulk-load filled-out PDF inspection forms
+//  Reads each PDF's form fields, maps them to a record, adds to the log.
+//  Damper name = filename (leading "." stripped). Incomplete = Repair Made blank.
+// =========================================================
+
+// Map from PDF form-field name -> record key. Decoded from the Arctic
+// Repairs/Decommission fillable PDF.
+const PDF_FIELD_MAP = {
+  'Angle Ring Notes(1)': 'dateTested',
+  'Angle Ring Notes(2)': 'damperId',       // (overridden by filename, but captured as fallback)
+  'Angle Ring Notes(3)': 'damperAlias',
+  'Angle Ring Notes(4)': 'equipmentName',
+  'Angle Ring Notes(5)': 'roomName',
+  'Angle Ring Notes(6)': 'damperSize',
+  'Angle Ring Notes(8)': 'roomNumber',
+  'Damper Type': 'damperType',
+  'Angle Ring': 'angleRing',
+  'Angle Ring Notes': 'angleRingNotes',
+  'ActuatorType': 'actuatorType',
+  'Indicator Light': 'indicatorLight',
+  'Floor': 'floor',
+  'Installed In': 'installedIn',
+  'Requires Shutdown': 'requiresShutdown',
+  'Critical Area ': 'criticalArea',
+  'Test': 'testResult',
+  'Floor(1)': 'repairMade',
+  'Floor(2)': 'cochranScope',
+  'Floor(3)': 'climatechScope',
+  'Floor(5)': 'fireAlarm',
+  'Floor(4)': 'sizeMatchesSchedule',
+  'Notes': 'notes',
+};
+
+// Strip a leading "." from a damper filename and the .pdf extension
+function cleanDamperName(filename){
+  let n = filename.split('/').pop();           // drop any folder path
+  n = n.replace(/\.pdf$/i, '');                 // drop extension
+  n = n.replace(/^\.+/, '');                    // drop leading dots
+  return n.trim();
+}
+
+// Read a single PDF's form fields into a {key:value} object using PDF.js
+async function readPdfFields(arrayBuf){
+  const pdf = await pdfjsLib.getDocument({data: arrayBuf}).promise;
+  const out = {};
+  for(let pno=1; pno<=pdf.numPages; pno++){
+    const page = await pdf.getPage(pno);
+    const annots = await page.getAnnotations();
+    annots.forEach(a=>{
+      if(a.fieldName === undefined || a.fieldName === null) return;
+      let val = a.fieldValue;
+      if(Array.isArray(val)) val = val.join(', ');
+      if(val === undefined || val === null) val = '';
+      out[a.fieldName] = String(val).trim();
+    });
+  }
+  return out;
+}
+
+// Convert raw PDF field values into a normalized record
+function pdfFieldsToRecord(fields, damperName){
+  const rec = {};
+  Object.entries(PDF_FIELD_MAP).forEach(([pdfKey, recKey])=>{
+    if(fields[pdfKey] !== undefined && fields[pdfKey] !== ''){
+      rec[recKey] = fields[pdfKey];
+    }
+  });
+  // Damper name always comes from the filename
+  rec.damperId = damperName;
+  // Normalize a couple of known trailing-space values
+  ['indicatorLight','installedIn','criticalArea','testResult','repairMade','cochranScope','fireAlarm','climatechScope','sizeMatchesSchedule'].forEach(k=>{
+    if(rec[k]) rec[k] = rec[k].trim();
+  });
+  return rec;
+}
+
+async function handleZipImport(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+  if(typeof JSZip === 'undefined'){ showToast('ZIP library not loaded'); return; }
+  if(typeof pdfjsLib === 'undefined'){ showToast('PDF library not loaded'); return; }
+
+  // Progress banner
+  let banner = document.getElementById('map-progress-banner');
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'map-progress-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:400;background:var(--navy);color:#fff;padding:12px 16px;font-size:13px;text-align:center;font-weight:600;';
+    document.body.appendChild(banner);
+  }
+  const setProg = (m)=>{ banner.textContent = m; };
+  const fail = (m)=>{ banner.style.background='var(--red)'; setProg(m); setTimeout(()=>banner.remove(), 7000); };
+
+  try{
+    setProg('Reading ZIP...');
+    const zip = await JSZip.loadAsync(file);
+    const pdfEntries = [];
+    zip.forEach((path, entry)=>{
+      if(!entry.dir && /\.pdf$/i.test(path) && !path.startsWith('__MACOSX')) pdfEntries.push(entry);
+    });
+    if(!pdfEntries.length){ fail('No PDF files found in the ZIP'); return; }
+
+    setProg(`Found ${pdfEntries.length} PDFs. Importing...`);
+    let added = 0, updated = 0, incomplete = 0;
+    const importTarget = currentSubFolder || REPAIR_BUILDING;
+
+    for(let i=0;i<pdfEntries.length;i++){
+      const entry = pdfEntries[i];
+      const damperName = cleanDamperName(entry.name);
+      setProg(`Importing ${i+1}/${pdfEntries.length}: ${damperName}`);
+      let rec;
+      try{
+        const buf = await entry.async('arraybuffer');
+        const fields = await readPdfFields(buf);
+        rec = pdfFieldsToRecord(fields, damperName);
+      }catch(e){
+        console.error('failed to read', entry.name, e);
+        rec = { damperId: damperName }; // still record the name
+      }
+
+      // Mark incomplete if Repair Made is blank (per the rule)
+      const isComplete = !!(rec.repairMade && rec.repairMade.trim());
+      if(!isComplete) incomplete++;
+
+      // Scope to hospital + repairs building
+      rec.hospitalId = currentHospitalId;
+      rec.subFolder = importTarget;
+      rec.importComplete = isComplete;
+
+      // Merge with an existing record of the same damper in this scope, else add
+      const existing = records.find(r=>
+        r.hospitalId===currentHospitalId &&
+        r.subFolder===importTarget &&
+        normDamperId(r.damperId)===normDamperId(damperName)
+      );
+      if(existing){
+        Object.assign(existing, rec, { _id: existing._id });
+        saveRecords();
+        fbSaveRecord(existing);
+        updated++;
+      } else {
+        rec._id = 'rec_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7);
+        records.push(rec);
+        saveRecords();
+        fbSaveRecord(rec);
+        added++;
+      }
+    }
+
+    banner.style.background = 'var(--navy)';
+    setProg(`✓ Imported: ${added} new, ${updated} updated, ${incomplete} marked incomplete`);
+    setTimeout(()=>banner.remove(), 5000);
+    if(event.target) try{ event.target.value=''; }catch(e){}
+    renderLog();
+    renderDashboard();
+  }catch(e){
+    console.error('zip import failed:', e);
+    fail('Import failed: '+(e.message||e));
+  }
 }
 
 // Modal to choose export format (Excel or CSV)
@@ -3383,6 +3614,7 @@ function initMapControls(){
 
 document.getElementById('app-footer').textContent = `Arctic FSD Testing System · ${APP_VERSION}`;
 document.getElementById('version-badge').textContent = APP_VERSION;
+ensureSeededHospitals(); // Kaiser Sunnyside + Repairs & Decommissions building
 updateHospitalHeader();
 if(currentHospitalId && getHospital(currentHospitalId)){
   switchView('dashboard');
@@ -3392,6 +3624,8 @@ if(currentHospitalId && getHospital(currentHospitalId)){
 }
 handleHashRoute();
 initMapControls();
+const zipInput = document.getElementById('import-zip-input');
+if(zipInput) zipInput.addEventListener('change', handleZipImport);
 // Init Firebase after UI is ready (async — doesn't block render)
 initFirebase();
 
