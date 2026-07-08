@@ -68,6 +68,8 @@
   .badge.decom{background:rgba(180,140,40,0.15);color:var(--gold);}
   .empty{text-align:center;color:var(--text-dim);padding:40px 20px;font-size:13px;}
   .did-link{color:var(--navy);text-decoration:underline;cursor:pointer;font-weight:700;}
+  td.editable{cursor:pointer;}
+  td.editable:hover{outline:2px solid var(--navy-dim);outline-offset:-2px;}
   .toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
     padding:12px 20px;border-radius:8px;font-size:13px;z-index:500;opacity:0;transition:opacity 0.3s;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
   .toast.show{opacity:1;}
@@ -99,12 +101,13 @@
     </div>
     <div class="spacer"></div>
     <a class="back-link" id="back-link" href="index.html">&#8592; Main Site</a>
-    <span class="version-badge" id="version-badge">v1.0</span>
+    <span class="version-badge" id="version-badge">v1.3</span>
   </header>
   <nav class="tabs" id="tabs">
     <button class="active" data-view="dashboard" onclick="switchView('dashboard')">Dashboard</button>
     <button data-view="inspect" onclick="switchView('inspect')">New Form</button>
     <button data-view="log" onclick="switchView('log')">Project Log</button>
+    <button data-view="map" onclick="switchView('map')">Map</button>
   </nav>
   <main>
     <!-- DASHBOARD -->
@@ -181,6 +184,7 @@
           <button class="btn btn-outline" onclick="promptExportFormat()">Export Log</button>
           <button class="btn btn-danger" onclick="promptClearLog()">Clear Log</button>
         </div>
+        <div id="log-count" style="font-size:12px;font-weight:700;color:var(--navy);margin-top:10px;"></div>
       </div>
       <div class="log-table-wrap">
         <table class="log-table" id="log-table">
@@ -189,6 +193,40 @@
         </table>
       </div>
       <div class="empty" id="log-empty" style="display:none;"></div>
+    </section>
+
+    <!-- MAP -->
+    <section class="view" id="view-map">
+      <div class="card" id="map-no-file" style="display:none;text-align:center;">
+        <h2>Damper Map</h2>
+        <p style="font-size:13px;color:var(--text-dim);">No drawing loaded for this job yet. Upload a PDF map to enable map view and damper links.</p>
+        <label class="btn" style="cursor:pointer;display:inline-block;width:auto;padding:12px 24px;">
+          &#128206; Upload PDF Map
+          <input type="file" accept="application/pdf" style="display:none;" id="map-empty-upload-input">
+        </label>
+      </div>
+      <div id="map-content" style="display:none;">
+        <div class="card" style="padding:10px;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select id="map-page-select" style="margin:0;width:auto;flex:1;min-width:120px;padding:8px;border:1px solid var(--line);border-radius:6px;"></select>
+            <button class="btn btn-outline" style="width:auto;margin:0;padding:8px 12px;font-size:12px;" id="map-zoom-out">&#8722;</button>
+            <button class="btn btn-outline" style="width:auto;margin:0;padding:8px 12px;font-size:12px;" id="map-zoom-in">+</button>
+            <button class="btn btn-outline" style="width:auto;margin:0;padding:8px 12px;font-size:12px;" id="map-zoom-reset">Fit</button>
+            <label class="btn btn-outline" style="width:auto;margin:0;padding:8px 12px;font-size:12px;cursor:pointer;">
+              &#128206; Replace
+              <input type="file" accept="application/pdf" style="display:none;" id="map-replace-input">
+            </label>
+          </div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:8px;">
+            <span id="map-coverage-summary"></span>
+          </div>
+        </div>
+        <div id="map-viewport" style="position:relative;overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:8px;background:#fff;max-height:72vh;">
+          <div id="map-canvas-wrap" style="position:relative;transform-origin:0 0;">
+            <div id="map-markers" style="position:absolute;inset:0;pointer-events:none;z-index:4;"></div>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
   <footer class="sig" id="app-footer">ARCTIC Repairs &amp; Decommissions</footer>
@@ -220,7 +258,7 @@
    Shares Firebase with the main site but only reads/writes
    records scoped to hospitalId + subFolder = "Repairs & Decommissions".
    ========================================================= */
-const APP_VERSION = 'v1.0';
+const APP_VERSION = 'v1.3';
 const REPAIR_BUILDING = 'Repairs & Decommissions';
 const CLEAR_LOG_PIN = '1977';
 const STORAGE_KEY = 'fsd_repairs_records_v1';
@@ -276,6 +314,9 @@ async function initFirebase(){
         currentHospitalDisplay = data.name; // use the real display name
       }
     });
+    // Load this job's map index now that the hospital is resolved, then
+    // refresh whichever view is showing (log flags depend on map labels)
+    loadMapData().then(()=>refreshActive()).catch(()=>{});
     // Listen to records
     db.collection('records').onSnapshot(s=>{
       const all = s.docs.map(d=>({...d.data(), _id:d.id}));
@@ -298,15 +339,18 @@ function switchView(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  if(v!=='map'){ const bk=document.getElementById('map-back-log-btn'); if(bk) bk.remove(); }
   if(v==='dashboard') renderDashboard();
   if(v==='log') renderLog();
   if(v==='inspect' && !wizard) renderIdEntry();
+  if(v==='map') renderMap();
 }
 function refreshActive(){
   const active = document.querySelector('.view.active');
   if(!active) return;
   if(active.id==='view-dashboard') renderDashboard();
   if(active.id==='view-log') renderLog();
+  if(active.id==='view-map') renderMap();
 }
 
 /* =========================================================
@@ -457,7 +501,7 @@ const LOG_COLUMNS=[
   ['Size Matches','sizeMatchesSchedule'],['Test','testResult'],['Date','dateTested'],
   ['Alias','damperAlias'],['Equipment','equipmentName'],['Room Name','roomName'],
   ['Room #','roomNumber'],['Floor','floor'],['Size','damperSize'],['Type','damperType'],
-  ['Installed In','installedIn'],['Shutdown','requiresShutdown'],['Critical','criticalArea'],['Notes','notes'],
+  ['Installed In','installedIn'],['Shutdown','requiresShutdown'],['Critical','criticalArea'],['Photos','__photos'],['Notes','notes'],
 ];
 function renderLog(){
   const scoped=scopedRecords();
@@ -494,6 +538,11 @@ function renderLog(){
   const body=document.getElementById('log-table-body');
   const empty=document.getElementById('log-empty');
   const table=document.getElementById('log-table');
+  // Filtered quantity display
+  const cnt=document.getElementById('log-count');
+  if(cnt) cnt.textContent=`Showing ${filtered.length} of ${scoped.length} forms`;
+  // Set of damper labels on the map (for flagging entries with no map location)
+  const mapLabelSet = (mapData && mapData.pages) ? new Set([].concat(...mapData.pages.map(p=>p.labels.map(l=>normDamperId(l.t))))) : null;
   head.innerHTML=LOG_COLUMNS.map(([h],i)=>`<th${i===0?' class="sticky-col"':''}>${h}</th>`).join('')+'<th>Actions</th>';
   if(!filtered.length){ body.innerHTML=''; table.style.display='none'; empty.style.display='block'; empty.innerHTML='No forms match your filters.'; return; }
   table.style.display=''; empty.style.display='none';
@@ -501,18 +550,30 @@ function renderLog(){
   body.innerHTML=filtered.slice().reverse().map(r=>{
     const cells=LOG_COLUMNS.map(([h,key])=>{
       if(key==='__status') return `<td>${isComplete(r)?'<span class="badge pass">Complete</span>':'<span class="badge fail">Incomplete</span>'}</td>`;
-      if(key==='testResult') return `<td>${r.testResult?`<span class="badge ${badge[r.testResult]||''}">${r.testResult}</span>`:'—'}</td>`;
-      if(key==='damperId') return `<td class="sticky-col"><div style="display:flex;align-items:center;gap:8px;"><button class="btn btn-outline btn-xs" data-action="edit" data-id="${r._id}">Edit</button><span>${escapeHtml(r.damperId||'—')}</span></div></td>`;
-      return `<td>${escapeHtml(r[key]||'—')}</td>`;
+      if(key==='__photos') return `<td>${(r.photos||[]).length}/${MAX_PHOTOS}</td>`;
+      if(key==='testResult') return `<td class="editable" data-ek="testResult" data-id="${r._id}">${r.testResult?`<span class="badge ${badge[r.testResult]||''}">${r.testResult}</span>`:'—'}</td>`;
+      if(key==='damperId'){
+        const onMap = mapLabelSet ? mapLabelSet.has(normDamperId(baseDamperName(r.damperId))) : true;
+        const flag = onMap ? '' : ' <span class="badge fail" title="Damper not found on the map" style="font-size:10px;">&#9873; Not on map</span>';
+        return `<td class="sticky-col"><div style="display:flex;align-items:center;gap:8px;"><button class="btn btn-outline btn-xs" data-action="edit" data-id="${r._id}">Edit</button><span class="did-link" data-action="map" data-id="${r._id}">${escapeHtml(r.damperId||'—')}</span>${flag}</div></td>`;
+      }
+      return `<td class="editable" data-ek="${key}" data-id="${r._id}">${escapeHtml(r[key]||'—')}</td>`;
     }).join('');
-    return `<tr>${cells}<td><div class="actions-cell"><button class="btn btn-outline" data-action="open" data-id="${r._id}">Open</button><button class="btn btn-danger" data-action="del" data-id="${r._id}">Del</button></div></td></tr>`;
+    return `<tr>${cells}<td><div class="actions-cell"><button class="btn btn-outline" data-action="open" data-id="${r._id}">Open</button><button class="btn btn-outline" data-action="map" data-id="${r._id}">Map</button><button class="btn btn-danger" data-action="del" data-id="${r._id}">Del</button></div></td></tr>`;
   }).join('');
   body.onclick=function(e){
-    const btn=e.target.closest('[data-action]'); if(!btn) return;
-    const id=btn.dataset.id; const r=records.find(x=>x._id===id);
-    if(btn.dataset.action==='edit') editRecord(id), switchView('inspect');
-    if(btn.dataset.action==='open' && r) openReport(r);
-    if(btn.dataset.action==='del') delRecord(id);
+    const btn=e.target.closest('[data-action]');
+    if(btn){
+      const id=btn.dataset.id; const r=records.find(x=>x._id===id);
+      if(btn.dataset.action==='edit') editRecord(id), switchView('inspect');
+      if(btn.dataset.action==='open' && r) openReport(r);
+      if(btn.dataset.action==='map' && r) jumpToMap(r.damperId);
+      if(btn.dataset.action==='del') delRecord(id);
+      return;
+    }
+    // Tap a cell to edit just that piece of info
+    const td=e.target.closest('td.editable[data-ek]');
+    if(td) openCellEditor(td.dataset.id, td.dataset.ek);
   };
 }
 function delRecord(id){
@@ -537,6 +598,7 @@ function openReport(r){
     <div class="sec"><h2>Repair, Decommission & Replace</h2>
     ${f('Repair Made',r.repairMade)}${f('Cochran Scope',r.cochranScope)}${f('Fire Alarm',r.fireAlarm)}
     ${f('Climatech Scope',r.climatechScope)}${f('If Decommissioned, Size Matches Schedule?',r.sizeMatchesSchedule)}</div>
+    ${(r.photos&&r.photos.length)?`<div style="margin-top:16px;"><b>Photos:</b><div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">${r.photos.map(p=>`<img src="${p}" style="max-width:280px;max-height:360px;border:1px solid #999;border-radius:4px;">`).join('')}</div></div>`:''}
     ${f('Notes',r.notes)}
     </body></html>`);
   w.document.close();
@@ -562,6 +624,91 @@ async function readPdfFields(buf){
   return out;
 }
 function pdfToRecord(fields,name){ const rec={}; Object.entries(PDF_FIELD_MAP).forEach(([pk,rk])=>{ if(fields[pk]) rec[rk]=fields[pk].trim(); }); rec.damperId=name; return rec; }
+
+/* ---- Photo extraction from PDF (Bluebeam-embedded images) ----
+   Photos live inside Form XObjects; PDF.js exposes them via the operator
+   list. We skip wide banners (the Arctic logo) by aspect ratio, downscale
+   to keep Firestore docs small, and keep at most 2 per form. */
+const MAX_PHOTOS=2;
+function imgObjToJpeg(img){
+  try{
+    if(!img || !img.width || !img.data) return null;
+    const canvas=document.createElement('canvas');
+    canvas.width=img.width; canvas.height=img.height;
+    const ctx=canvas.getContext('2d');
+    const out=ctx.createImageData(img.width,img.height);
+    const src=img.data, dst=out.data;
+    if(img.kind===3){ dst.set(src.subarray(0,dst.length)); }           // RGBA_32BPP
+    else if(img.kind===2){ for(let i=0,j=0;j<dst.length;i+=3,j+=4){ dst[j]=src[i]; dst[j+1]=src[i+1]; dst[j+2]=src[i+2]; dst[j+3]=255; } } // RGB_24BPP
+    else { canvas.width=canvas.height=0; return null; }
+    ctx.putImageData(out,0,0);
+    // Downscale to max 700px long edge so records stay well under Firestore's 1MB doc limit
+    const MAXD=700; let w=img.width,h=img.height;
+    if(Math.max(w,h)>MAXD){ const s=MAXD/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+    const out2=document.createElement('canvas'); out2.width=w; out2.height=h;
+    out2.getContext('2d').drawImage(canvas,0,0,w,h);
+    const url=out2.toDataURL('image/jpeg',0.78);
+    canvas.width=canvas.height=0; out2.width=out2.height=0;
+    return url;
+  }catch(e){ return null; }
+}
+async function extractPdfPhotos(page){
+  try{
+    const opList=await page.getOperatorList();
+    const ids=[];
+    for(let i=0;i<opList.fnArray.length;i++){
+      if(opList.fnArray[i]===pdfjsLib.OPS.paintImageXObject) ids.push(opList.argsArray[i][0]);
+    }
+    const photos=[];
+    for(const id of ids){
+      if(photos.length>=MAX_PHOTOS) break;
+      let img=null;
+      try{ img=await new Promise(res=>{ try{ page.objs.get(id,o=>res(o)); }catch(e){ res(null); } }); }catch(e){}
+      if(!img||!img.width) continue;
+      const aspect=img.width/img.height;
+      if(aspect>2.5||aspect<0.25) continue;          // banners / logo strips
+      if(img.width*img.height<10000) continue;       // icons
+      const url=imgObjToJpeg(img);
+      if(url) photos.push(url);
+    }
+    return photos;
+  }catch(e){ console.error('photo extract',e); return []; }
+}
+
+// Map one page's raw field values ({pdfFieldName: value}) to record keys.
+// Tolerates duplicate-field suffixes that PDF combiners add (e.g. "Damper Type_2",
+// "Test#1", "Notes.0") while NOT confusing template names like "Floor(1)".
+function mapPageFields(raw){
+  const rec={};
+  const keys=Object.keys(PDF_FIELD_MAP).sort((a,b)=>b.length-a.length); // longest first
+  for(const [fname,val] of Object.entries(raw)){
+    if(!val) continue;
+    if(PDF_FIELD_MAP[fname]!==undefined){ rec[PDF_FIELD_MAP[fname]]=val.trim(); continue; }
+    for(const k of keys){
+      if(fname.startsWith(k)){
+        const rest=fname.slice(k.length);
+        if(/^[_#.]\d+$/.test(rest) || /^ \d+$/.test(rest) || /^\s*\[\d+\]$/.test(rest)){ rec[PDF_FIELD_MAP[k]]=val.trim(); break; }
+      }
+    }
+  }
+  return rec;
+}
+
+// Read a PDF into one {recFields, photos} entry PER PAGE.
+// Multi-page files are multiple repair rounds: page 1 = newest.
+async function readPdfPages(buf){
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const out=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const annots=await page.getAnnotations();
+    const raw={};
+    annots.forEach(a=>{ if(a.fieldName==null) return; let v=a.fieldValue; if(Array.isArray(v)) v=v.join(', '); if(v==null) v=''; raw[a.fieldName]=String(v).trim(); });
+    const photos=await extractPdfPhotos(page);
+    out.push({ recFields: mapPageFields(raw), photos: photos.slice(0,MAX_PHOTOS) });
+  }
+  return out;
+}
 async function handleZipImport(ev){
   const file=ev.target.files&&ev.target.files[0]; if(!file) return;
   if(typeof JSZip==='undefined'){ showToast('ZIP lib not loaded'); return; }
@@ -577,14 +724,30 @@ async function handleZipImport(ev){
     for(let i=0;i<entries.length;i++){
       const e=entries[i]; const name=cleanDamperName(e.name);
       prog(`Importing ${i+1}/${entries.length}: ${name}`);
-      let rec;
-      try{ const buf=await e.async('arraybuffer'); rec=pdfToRecord(await readPdfFields(buf),name); }
-      catch(err){ rec={damperId:name}; }
-      rec.hospitalId=currentHospitalId; rec.subFolder=REPAIR_BUILDING; rec.importComplete=isComplete(rec);
-      if(!rec.importComplete) incomplete++;
-      const ex=records.find(r=>r.subFolder===REPAIR_BUILDING && normDamperId(r.damperId)===normDamperId(name));
-      if(ex){ Object.assign(ex,rec,{_id:ex._id}); saveLocal(); fbSave(ex); updated++; }
-      else { rec._id='rec_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); records.push(rec); saveLocal(); fbSave(rec); added++; }
+      // One record PER PAGE: page 1 is the newest round and keeps the plain
+      // name; older rounds get " - Round N" (last page = Round 1).
+      let pageRecs=[];
+      try{
+        const buf=await e.async('arraybuffer');
+        const pages=await readPdfPages(buf);
+        const N=pages.length;
+        pages.forEach((pg,idx)=>{
+          const rec={...pg.recFields};
+          rec.damperId = idx===0 ? name : `${name} - Round ${N-idx}`;
+          if(pg.photos.length) rec.photos=pg.photos;
+          pageRecs.push(rec);
+        });
+        if(!pageRecs.length) pageRecs=[{damperId:name}];
+      }
+      catch(err){ console.error('read failed', e.name, err); pageRecs=[{damperId:name}]; }
+
+      for(const rec of pageRecs){
+        rec.hospitalId=currentHospitalId; rec.subFolder=REPAIR_BUILDING; rec.importComplete=isComplete(rec);
+        if(!rec.importComplete) incomplete++;
+        const ex=records.find(r=>r.subFolder===REPAIR_BUILDING && normDamperId(r.damperId)===normDamperId(rec.damperId));
+        if(ex){ Object.assign(ex,rec,{_id:ex._id}); saveLocal(); fbSave(ex); updated++; }
+        else { rec._id='rec_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); records.push(rec); saveLocal(); fbSave(rec); added++; }
+      }
     }
     banner.style.background='#1a237e'; prog(`✓ ${added} new, ${updated} updated, ${incomplete} incomplete`);
     setTimeout(()=>banner.remove(),5000);
@@ -639,9 +802,452 @@ function pinCancel(){ document.getElementById('pin-overlay').style.display='none
 function updateDots(){ for(let i=0;i<4;i++){ const d=document.getElementById('dot-'+i); if(d) d.className='pin-dot'+(i<pinBuffer.length?' filled':''); } }
 function checkPin(){ if(pinBuffer===pinExpected){ document.getElementById('pin-overlay').style.display='none'; pinBuffer=''; updateDots(); const cb=pinCallback; pinCallback=null; if(cb) cb(); } else { for(let i=0;i<4;i++){ const d=document.getElementById('dot-'+i); if(d){ d.style.background='#c0392b'; d.style.borderColor='#c0392b'; } } setTimeout(()=>{ pinBuffer=''; updateDots(); for(let i=0;i<4;i++){ const d=document.getElementById('dot-'+i); if(d){ d.style.background=''; d.style.borderColor=''; } } },500); } }
 
+/* =========================================================
+   INLINE CELL EDITOR - tap a log cell to change just that field
+   ========================================================= */
+function fieldOptionsFor(key){
+  const s = STEPS.find(x=>x.key===key);
+  if(s && s.options) return s.options;
+  return null;
+}
+function fieldLabelFor(key){
+  const s = STEPS.find(x=>x.key===key);
+  if(s) return s.label;
+  const col = LOG_COLUMNS.find(([h,k])=>k===key);
+  return col ? col[0] : key;
+}
+function openCellEditor(id, key){
+  const r = records.find(x=>x._id===id);
+  if(!r) return;
+  const label = fieldLabelFor(key);
+  const options = fieldOptionsFor(key);
+  const cur = r[key]||'';
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  let inputHtml;
+  if(options){
+    inputHtml = `<select id="ce-input" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">
+      <option value="">(blank)</option>
+      ${options.map(o=>`<option ${o===cur?'selected':''}>${escapeHtml(o)}</option>`).join('')}
+    </select>`;
+  } else if(key==='notes'){
+    inputHtml = `<textarea id="ce-input" rows="4" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">${escapeHtml(cur)}</textarea>`;
+  } else if(key==='dateTested'){
+    inputHtml = `<input type="date" id="ce-input" value="${escapeHtml(cur)}" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">`;
+  } else {
+    inputHtml = `<input type="text" id="ce-input" value="${escapeHtml(cur)}" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">`;
+  }
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:380px;width:100%;padding:20px;">
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;">${escapeHtml(r.damperId||'')}</div>
+    <h2 style="margin:0 0 12px;font-size:16px;">${escapeHtml(label)}</h2>
+    ${inputHtml}
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-outline" id="ce-cancel">Cancel</button>
+      <button class="btn" id="ce-save">Save</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector('#ce-input'); if(inp && inp.focus) inp.focus();
+  ov.querySelector('#ce-cancel').addEventListener('click',()=>ov.remove());
+  ov.querySelector('#ce-save').addEventListener('click',()=>{
+    const val=(ov.querySelector('#ce-input').value||'').trim();
+    r[key]=val;
+    r.importComplete=isComplete(r);
+    saveLocal(); fbSave(r);
+    ov.remove();
+    renderLog(); renderDashboard();
+    showToast(`${label} updated`);
+  });
+}
+
+/* =========================================================
+   MAP MODULE - repairs has its OWN map, stored separately from
+   the main site's (Firestore doc + IndexedDB key use "_repairs").
+   Labels come from unflattened FreeText markups.
+   ========================================================= */
+let mapData=null, mapTiles=null, mapCurrentPage=0, mapZoom=1, mapJumpTarget=null;
+let mapTileEls=[], _cullScheduled=false, mapLogReturn=null;
+let MAP_RENDER_RES=12000;
+const MAP_RES_OPTIONS=[
+  {px:5000, label:'Standard (5k) - fast, light'},
+  {px:8000, label:'High (8k)'},
+  {px:12000,label:'Very High (12k)'},
+  {px:16000,label:'Maximum (16k) - slow, large'},
+];
+function mapKey(){ return (currentHospitalId||'unknown') + '_repairs'; }
+function baseDamperName(s){ return String(s||'').replace(/\s*-\s*Round\s*\d+\s*$/i,'').trim(); }
+
+function mapDbOpen(){ return new Promise((res,rej)=>{ const rq=indexedDB.open('repairs_maps',1); rq.onupgradeneeded=()=>rq.result.createObjectStore('maps'); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); }); }
+async function mapDbGet(key){ const dbi=await mapDbOpen(); return new Promise((res,rej)=>{ const tx=dbi.transaction('maps','readonly'); const rq=tx.objectStore('maps').get(key); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error); }); }
+async function mapDbPut(key,val){ const dbi=await mapDbOpen(); return new Promise((res,rej)=>{ const tx=dbi.transaction('maps','readwrite'); tx.objectStore('maps').put(val,key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+
+function promptResolution(){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.92);display:flex;align-items:center;justify-content:center;padding:20px;';
+    const card=document.createElement('div');
+    card.style.cssText='background:var(--panel);border-radius:12px;max-width:420px;width:100%;padding:20px;';
+    card.innerHTML=`<h2 style="margin:0 0 6px;">Choose Map Quality</h2>
+      <p style="font-size:13px;color:var(--text-dim);margin:0 0 16px;">Higher is sharper when zoomed but slower. <b>12k recommended.</b> 16k can crash on some phones.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${MAP_RES_OPTIONS.map(o=>`<button class="btn ${o.px===12000?'':'btn-outline'}" data-res="${o.px}" style="text-align:left;margin:0;">${o.label}${o.px===12000?'  \u2713 Recommended':''}</button>`).join('')}
+      </div>
+      <button class="btn btn-outline" data-res="cancel" style="margin-top:14px;">Cancel</button>`;
+    ov.appendChild(card); document.body.appendChild(ov);
+    card.addEventListener('click',e=>{ const b=e.target.closest('[data-res]'); if(!b) return; const v=b.dataset.res; ov.remove(); resolve(v==='cancel'?null:parseInt(v)); });
+  });
+}
+
+async function renderPageTiles(page, baseViewport, onProgress){
+  const TARGET_LONG=MAP_RENDER_RES;
+  const longEdge=Math.max(baseViewport.width, baseViewport.height);
+  const scale=Math.min(TARGET_LONG/longEdge, 8);
+  const vp=page.getViewport({scale});
+  const fullW=Math.ceil(vp.width), fullH=Math.ceil(vp.height);
+  const TILE=1024;
+  const cols=Math.ceil(fullW/TILE), rows=Math.ceil(fullH/TILE);
+  const total=cols*rows, data=new Array(total);
+  let done=0;
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const tx=c*TILE, ty=r*TILE;
+      const tw=Math.min(TILE,fullW-tx), th=Math.min(TILE,fullH-ty);
+      const tile=document.createElement('canvas'); tile.width=tw; tile.height=th;
+      const tctx=tile.getContext('2d'); tctx.fillStyle='#ffffff'; tctx.fillRect(0,0,tw,th);
+      const tvp=page.getViewport({scale, offsetX:-tx, offsetY:-ty});
+      await page.render({canvasContext:tctx, viewport:tvp, background:'#ffffff'}).promise;
+      data[r*cols+c]=tile.toDataURL('image/jpeg',0.85);
+      tile.width=tile.height=0;
+      done++; if(onProgress) onProgress(`rendering tile ${done}/${total}`);
+      await new Promise(res=>setTimeout(res,0));
+    }
+  }
+  return {cols,rows,tile:TILE,fullW,fullH,data};
+}
+
+async function handleMapUpload(event){
+  const file=event.target.files&&event.target.files[0];
+  if(!file) return;
+  const chosen=await promptResolution();
+  if(chosen===null){ try{event.target.value='';}catch(e){} return; }
+  MAP_RENDER_RES=chosen;
+  let banner=document.getElementById('map-progress-banner');
+  if(!banner){ banner=document.createElement('div'); banner.id='map-progress-banner'; banner.style.cssText='position:fixed;top:0;left:0;right:0;z-index:400;background:var(--navy);color:#fff;padding:12px 16px;font-size:13px;text-align:center;font-weight:600;'; document.body.appendChild(banner); }
+  const setProg=m=>{ banner.textContent=m; };
+  const fail=m=>{ banner.style.background='var(--red)'; setProg(m); setTimeout(()=>banner.remove(),7000); };
+  setProg('Starting...');
+  if(!currentHospitalId){ fail('Still connecting to cloud - try again in a few seconds'); return; }
+  if(typeof pdfjsLib==='undefined'){ fail('PDF library not loaded'); return; }
+  try{
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    const buf=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    setProg(`PDF loaded: ${pdf.numPages} pages. Reading damper markups...`);
+    const pages=[];
+    for(let pno=1;pno<=pdf.numPages;pno++){
+      const page=await pdf.getPage(pno);
+      const viewport=page.getViewport({scale:1});
+      const annots=await page.getAnnotations({intent:'display'});
+      const labels=[];
+      annots.forEach(a=>{
+        const raw=((a.contents)||(a.contentsObj&&a.contentsObj.str)||'').trim();
+        if(!raw) return;
+        const txt=raw.replace(/\s+/g,'').toUpperCase();
+        if(txt.length<3||txt.length>40) return;
+        const r=a.rect; if(!r||r.length<4) return;
+        const cx=(r[0]+r[2])/2, cy=(r[1]+r[3])/2;
+        const pt=viewport.convertToViewportPoint(cx,cy);
+        labels.push({t:txt, x:+(pt[0]/viewport.width).toFixed(4), y:+(pt[1]/viewport.height).toFixed(4)});
+      });
+      if(labels.length) pages.push({page:pno, labels, _pageObj:page, _viewport:viewport});
+    }
+    if(!pages.length){ fail('No damper markups found (needs unflattened FreeText labels)'); return; }
+    const indexPages=pages.map(p=>({page:p.page, labels:p.labels}));
+    if(firebaseReady){
+      setProg('Saving damper labels to cloud...');
+      try{ await db.collection('maps').doc(mapKey()).set({pages:indexPages, fileName:file.name||'map.pdf', resolution:MAP_RENDER_RES, updatedAt:Date.now()}); }catch(e){ console.error(e); }
+    }
+    let existing=null; try{ existing=await mapDbGet(mapKey()); }catch(e){}
+    const tilesByPage=(existing&&existing.tiles)?existing.tiles:{};
+    for(const p of pages){
+      setProg(`Page ${p.page}: rendering (${MAP_RENDER_RES}px)...`);
+      try{
+        tilesByPage[p.page]=await renderPageTiles(p._pageObj, p._viewport, m=>setProg(`Page ${p.page}: ${m}`));
+        await mapDbPut(mapKey(), {tiles:tilesByPage, fileName:file.name||'map.pdf', resolution:MAP_RENDER_RES, updatedAt:Date.now()});
+      }catch(err){
+        fail(`Labels saved, but drawing failed on page ${p.page} (try lower quality). ${err.message||err}`);
+        mapData=null; mapTiles=null;
+        return;
+      }
+    }
+    banner.style.background='var(--navy)';
+    setProg(`\u2713 Map saved: ${pages.length} page(s), ${indexPages.reduce((s,p)=>s+p.labels.length,0)} labels @ ${MAP_RENDER_RES}px`);
+    setTimeout(()=>banner.remove(),4000);
+    try{event.target.value='';}catch(e){}
+    mapData=null; mapTiles=null;
+    renderMap(); renderLog();
+  }catch(e){ console.error(e); fail('Map failed: '+(e.message||e)); }
+}
+
+async function loadMapData(){
+  mapData=null; mapTiles=null;
+  if(!currentHospitalId) return;
+  if(firebaseReady){
+    try{ const doc=await db.collection('maps').doc(mapKey()).get(); if(doc.exists) mapData={hospitalId:currentHospitalId, ...doc.data()}; }catch(e){ console.error(e); }
+  }
+  try{
+    const local=await mapDbGet(mapKey());
+    if(local&&local.tiles){
+      mapTiles=local.tiles;
+      if(!mapData) mapData={hospitalId:currentHospitalId, pages:Object.keys(mapTiles).map(n=>({page:+n,labels:[]})), fileName:local.fileName, resolution:local.resolution};
+      if(mapData&&!mapData.resolution&&local.resolution) mapData.resolution=local.resolution;
+    }
+  }catch(e){ console.error(e); }
+}
+
+async function renderMap(){
+  const noFile=document.getElementById('map-no-file');
+  const content=document.getElementById('map-content');
+  if(!mapData || mapData.hospitalId!==currentHospitalId || mapTiles===null){
+    await loadMapData();
+  }
+  if(!mapData || !mapData.pages || !mapData.pages.length){
+    noFile.style.display='block'; content.style.display='none'; return;
+  }
+  noFile.style.display='none'; content.style.display='block';
+  const sel=document.getElementById('map-page-select');
+  sel.innerHTML=mapData.pages.map((p,i)=>`<option value="${i}">Page ${p.page} (${p.labels.length} labels)</option>`).join('');
+  if(mapCurrentPage>=mapData.pages.length) mapCurrentPage=0;
+  sel.value=mapCurrentPage;
+  sel.onchange=()=>{ mapCurrentPage=parseInt(sel.value); mapZoom=1; drawMapPage(); };
+  drawMapPage();
+}
+function drawMapPage(){
+  const page=mapData.pages[mapCurrentPage];
+  if(!page) return;
+  const markers=document.getElementById('map-markers');
+  const wrap=document.getElementById('map-canvas-wrap');
+  const tileSet=mapTiles&&mapTiles[page.page];
+  const old=document.getElementById('map-tile-layer'); if(old) old.remove();
+  if(!tileSet){
+    markers.innerHTML='';
+    updateCoverage('Labels synced from cloud. Load the PDF on this device to see the drawing.');
+    return;
+  }
+  const layer=document.createElement('div');
+  layer.id='map-tile-layer'; layer.style.cssText='position:absolute;inset:0;';
+  wrap.dataset.aspect=(tileSet.fullH/tileSet.fullW);
+  mapTileEls=[];
+  for(let r=0;r<tileSet.rows;r++){
+    for(let c=0;c<tileSet.cols;c++){
+      const url=tileSet.data[r*tileSet.cols+c];
+      if(!url) continue;
+      const leftPct=(c*tileSet.tile)/tileSet.fullW*100, topPct=(r*tileSet.tile)/tileSet.fullH*100;
+      const wPct=Math.min(tileSet.tile,tileSet.fullW-c*tileSet.tile)/tileSet.fullW*100;
+      const hPct=Math.min(tileSet.tile,tileSet.fullH-r*tileSet.tile)/tileSet.fullH*100;
+      const t=document.createElement('img');
+      t.style.cssText=`position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;display:block;background:#fff;`;
+      t.draggable=false;
+      t._tileUrl=url; t._geo={left:leftPct/100, top:topPct/100, w:wPct/100, h:hPct/100}; t._loaded=false;
+      layer.appendChild(t); mapTileEls.push(t);
+    }
+  }
+  wrap.insertBefore(layer, markers);
+  buildMarkers(page, markers, wrap);
+  applyMapZoom();
+  doJump(page, markers, wrap);
+  updateVisibleTiles();
+  const testedSet=new Set(scopedRecords().map(r=>normDamperId(baseDamperName(r.damperId))));
+  const tested=page.labels.filter(l=>testedSet.has(normDamperId(l.t))).length;
+  const res=mapData.resolution?` Quality: ${mapData.resolution>=1000?(mapData.resolution/1000)+'k':mapData.resolution}px.`:'';
+  updateCoverage(`This page: ${tested}/${page.labels.length} dampers have forms. Tap a damper: with a form opens it, without starts one.${res}`);
+}
+function updateCoverage(msg){ const el=document.getElementById('map-coverage-summary'); if(el) el.textContent=msg; }
+function buildMarkers(page, markers, wrap){
+  markers.innerHTML='';
+  const byBase={};
+  scopedRecords().forEach(r=>{ const b=normDamperId(baseDamperName(r.damperId)); (byBase[b]=byBase[b]||[]).push(r); });
+  page.labels.forEach(lbl=>{
+    const n=normDamperId(lbl.t);
+    const recs=byBase[n]||[];
+    const m=document.createElement('div');
+    m.style.cssText=`position:absolute;left:${lbl.x*100}%;top:${lbl.y*100}%;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;pointer-events:auto;cursor:pointer;background:transparent;`;
+    m.title=lbl.t;
+    m.addEventListener('click',()=>{
+      if(recs.length){
+        const plain=recs.find(r=>normDamperId(r.damperId)===n)||recs[0];
+        openReport(plain);
+      } else {
+        promptBeginForm(lbl.t);
+      }
+    });
+    markers.appendChild(m);
+  });
+}
+function promptBeginForm(name){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:360px;width:100%;padding:22px;text-align:center;">
+    <h2 style="margin:0 0 16px;font-size:16px;">Begin form for ${escapeHtml(name)}?</h2>
+    <div class="btn-row"><button class="btn btn-outline" data-a="no">No</button><button class="btn" data-a="yes">Yes</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{
+    const b=e.target.closest('[data-a]'); if(!b) return;
+    ov.remove();
+    if(b.dataset.a==='yes'){
+      wizard={ data:{ damperId:name, dateTested:todayStr(), hospitalId:currentHospitalId, subFolder:REPAIR_BUILDING }, step:1, editingId:null };
+      switchView('inspect'); renderStep();
+    }
+  });
+}
+function doJump(page, markers, wrap){
+  if(!mapJumpTarget) return;
+  const target=page.labels.find(l=>normDamperId(l.t)===normDamperId(baseDamperName(mapJumpTarget)));
+  if(target){
+    mapZoom=Math.max(mapZoom,4);
+    applyMapZoom();
+    requestAnimationFrame(()=>{
+      const vp=document.getElementById('map-viewport');
+      const wrapW=wrap.offsetWidth, wrapH=wrap.offsetHeight;
+      vp.scrollLeft=target.x*wrapW-vp.clientWidth/2;
+      vp.scrollTop=target.y*wrapH-vp.clientHeight/2;
+      updateVisibleTiles();
+    });
+    const pulse=document.createElement('div');
+    pulse.style.cssText=`position:absolute;left:${target.x*100}%;top:${target.y*100}%;width:40px;height:40px;margin:-20px 0 0 -20px;border:3px solid var(--gold);border-radius:50%;pointer-events:none;z-index:5;`;
+    markers.appendChild(pulse);
+    setTimeout(()=>pulse.remove(),3000);
+  }
+  mapJumpTarget=null;
+}
+function applyMapZoom(_retry){
+  const wrap=document.getElementById('map-canvas-wrap');
+  const vp=document.getElementById('map-viewport');
+  if(!wrap||!vp) return;
+  const baseW=vp.clientWidth;
+  if(!baseW){ const n=(_retry||0); if(n<30) requestAnimationFrame(()=>applyMapZoom(n+1)); return; }
+  const w=baseW*mapZoom;
+  wrap.style.width=w+'px';
+  const aspect=parseFloat(wrap.dataset.aspect||'0');
+  if(aspect>0) wrap.style.height=(w*aspect)+'px';
+  scheduleCull();
+}
+function scheduleCull(){ if(_cullScheduled) return; _cullScheduled=true; requestAnimationFrame(()=>{ _cullScheduled=false; updateVisibleTiles(); }); }
+function updateVisibleTiles(){
+  const wrap=document.getElementById('map-canvas-wrap');
+  const vp=document.getElementById('map-viewport');
+  if(!wrap||!vp||!mapTileEls.length) return;
+  const wrapW=wrap.offsetWidth, wrapH=wrap.offsetHeight;
+  if(!wrapW||!wrapH) return;
+  const mx=vp.clientWidth, my=vp.clientHeight;
+  const x0=(vp.scrollLeft-mx)/wrapW, x1=(vp.scrollLeft+vp.clientWidth+mx)/wrapW;
+  const y0=(vp.scrollTop-my)/wrapH, y1=(vp.scrollTop+vp.clientHeight+my)/wrapH;
+  for(const t of mapTileEls){
+    const g=t._geo;
+    const vis=(g.left+g.w>=x0)&&(g.left<=x1)&&(g.top+g.h>=y0)&&(g.top<=y1);
+    if(vis&&!t._loaded){ t.src=t._tileUrl; t._loaded=true; }
+    else if(!vis&&t._loaded){ t.removeAttribute('src'); t._loaded=false; }
+  }
+}
+async function jumpToMap(damperId){
+  if(!mapData || mapData.hospitalId!==currentHospitalId){ await loadMapData(); }
+  if(!mapData || !mapData.pages || !mapData.pages.length){ showToast('No map loaded yet - upload one on the Map tab'); return; }
+  const base=baseDamperName(damperId);
+  const pageIdx=mapData.pages.findIndex(p=>p.labels.some(l=>normDamperId(l.t)===normDamperId(base)));
+  if(pageIdx<0){ showToast(`No location found on map for ${damperId}`); return; }
+  const logView=document.getElementById('view-log');
+  if(logView&&logView.classList.contains('active')){
+    const wrapEl=document.querySelector('.log-table-wrap');
+    mapLogReturn={pageY:window.scrollY, wrapTop:wrapEl?wrapEl.scrollTop:0, wrapLeft:wrapEl?wrapEl.scrollLeft:0};
+  }
+  mapJumpTarget=damperId;
+  mapCurrentPage=pageIdx;
+  switchView('map');
+  showBackToLog();
+}
+function showBackToLog(){
+  if(!mapLogReturn) return;
+  let btn=document.getElementById('map-back-log-btn');
+  if(btn) return;
+  btn=document.createElement('button');
+  btn.id='map-back-log-btn';
+  btn.textContent='\u2190 Back to Log';
+  btn.style.cssText='position:fixed;bottom:20px;left:16px;z-index:300;background:var(--navy);color:#fff;border:none;border-radius:8px;padding:12px 18px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+  btn.addEventListener('click',()=>{
+    const ret=mapLogReturn; mapLogReturn=null; btn.remove();
+    switchView('log');
+    requestAnimationFrame(()=>{
+      window.scrollTo(0, ret.pageY||0);
+      const wrapEl=document.querySelector('.log-table-wrap');
+      if(wrapEl){ wrapEl.scrollTop=ret.wrapTop||0; wrapEl.scrollLeft=ret.wrapLeft||0; }
+    });
+  });
+  document.body.appendChild(btn);
+}
+function initMapControls(){
+  const zin=document.getElementById('map-zoom-in');
+  const zout=document.getElementById('map-zoom-out');
+  const zreset=document.getElementById('map-zoom-reset');
+  if(zin) zin.addEventListener('click',()=>{ mapZoom=Math.min(mapZoom*1.4,20); applyMapZoom(); });
+  if(zout) zout.addEventListener('click',()=>{ mapZoom=Math.max(mapZoom/1.4,1); applyMapZoom(); });
+  if(zreset) zreset.addEventListener('click',()=>{ mapZoom=1; applyMapZoom(); });
+  ['map-empty-upload-input','map-replace-input'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('change',handleMapUpload);
+  });
+  const vp=document.getElementById('map-viewport');
+  if(vp){
+    let dragging=false,startX=0,startY=0,startL=0,startT=0,moved=false;
+    const down=(cx,cy)=>{ dragging=true; moved=false; startX=cx; startY=cy; startL=vp.scrollLeft; startT=vp.scrollTop; vp.style.cursor='grabbing'; };
+    const move=(cx,cy)=>{ if(!dragging) return; const dx=cx-startX, dy=cy-startY; if(Math.abs(dx)>3||Math.abs(dy)>3) moved=true; vp.scrollLeft=startL-dx; vp.scrollTop=startT-dy; };
+    const up=()=>{ dragging=false; vp.style.cursor='grab'; };
+    vp.style.cursor='grab';
+    vp.addEventListener('mousedown',e=>down(e.clientX,e.clientY));
+    window.addEventListener('mousemove',e=>{ if(dragging){ e.preventDefault(); move(e.clientX,e.clientY); } });
+    window.addEventListener('mouseup',up);
+    vp.addEventListener('click',e=>{ if(moved){ e.stopPropagation(); e.preventDefault(); } },true);
+    vp.addEventListener('touchstart',e=>{ if(e.touches.length===1) down(e.touches[0].clientX,e.touches[0].clientY); },{passive:true});
+    vp.addEventListener('touchmove',e=>{ if(dragging&&e.touches.length===1) move(e.touches[0].clientX,e.touches[0].clientY); },{passive:true});
+    vp.addEventListener('touchend',up);
+    vp.addEventListener('scroll',scheduleCull,{passive:true});
+    vp.addEventListener('wheel',e=>{
+      e.preventDefault();
+      const wrap=document.getElementById('map-canvas-wrap');
+      if(!wrap) return;
+      const rect=vp.getBoundingClientRect();
+      const cx=vp.scrollLeft+(e.clientX-rect.left), cy=vp.scrollTop+(e.clientY-rect.top);
+      const pw=wrap.offsetWidth, ph=wrap.offsetHeight;
+      const fx=pw?cx/pw:0.5, fy=ph?cy/ph:0.5;
+      const factor=e.deltaY<0?1.15:1/1.15;
+      mapZoom=Math.min(Math.max(mapZoom*factor,1),20);
+      applyMapZoom();
+      const nw=wrap.offsetWidth, nh=wrap.offsetHeight;
+      vp.scrollLeft=fx*nw-(e.clientX-rect.left);
+      vp.scrollTop=fy*nh-(e.clientY-rect.top);
+    },{passive:false});
+  }
+  const mapView=document.getElementById('view-map');
+  if(mapView){
+    let depth=0, hint=null;
+    const show=()=>{ if(hint) return; hint=document.createElement('div'); hint.textContent='Drop PDF to upload map'; hint.style.cssText='position:fixed;inset:0;z-index:500;background:rgba(26,35,126,0.85);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;pointer-events:none;'; document.body.appendChild(hint); };
+    const hide=()=>{ if(hint){ hint.remove(); hint=null; } };
+    const hasFiles=e=>e.dataTransfer&&Array.from(e.dataTransfer.types||[]).includes('Files');
+    mapView.addEventListener('dragenter',e=>{ if(!hasFiles(e))return; e.preventDefault(); depth++; show(); });
+    mapView.addEventListener('dragover',e=>{ if(!hasFiles(e))return; e.preventDefault(); });
+    mapView.addEventListener('dragleave',e=>{ if(!hasFiles(e))return; depth--; if(depth<=0){ depth=0; hide(); } });
+    mapView.addEventListener('drop',e=>{
+      if(!hasFiles(e)) return;
+      e.preventDefault(); depth=0; hide();
+      const f=e.dataTransfer.files[0];
+      if(f&&f.type==='application/pdf') handleMapUpload({target:{files:[f]}});
+      else showToast('Drop a PDF file');
+    });
+  }
+}
+
 /* ---- INIT ---- */
 document.getElementById('version-badge').textContent=APP_VERSION;
 document.getElementById('import-zip-input').addEventListener('change',handleZipImport);
+initMapControls();
 renderDashboard();
 initFirebase();
 </script>
