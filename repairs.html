@@ -101,7 +101,7 @@
     </div>
     <div class="spacer"></div>
     <a class="back-link" id="back-link" href="index.html">&#8592; Main Site</a>
-    <span class="version-badge" id="version-badge">v1.3</span>
+    <span class="version-badge" id="version-badge">v1.4</span>
   </header>
   <nav class="tabs" id="tabs">
     <button class="active" data-view="dashboard" onclick="switchView('dashboard')">Dashboard</button>
@@ -118,7 +118,7 @@
         <div class="stat done" data-filter="__complete__"><div class="num" id="stat-complete">0</div><div class="lbl">Complete</div></div>
         <div class="stat fail" data-filter="__incomplete__"><div class="num" id="stat-incomplete">0</div><div class="lbl">Incomplete</div></div>
         <div class="stat decom" data-filter="Decommissioned"><div class="num" id="stat-decom">0</div><div class="lbl">Decommissioned</div></div>
-        <div class="stat" data-filter="Repaired"><div class="num" id="stat-repaired">0</div><div class="lbl">Repaired</div></div>
+        <div class="stat" data-filter="__repairs__"><div class="num" id="stat-repaired">0</div><div class="lbl">Repaired</div></div>
         <div class="stat" data-filter="Replaced"><div class="num" id="stat-replaced">0</div><div class="lbl">Replaced</div></div>
       </div>
       <div class="progress-wrap">
@@ -154,6 +154,7 @@
           <input type="text" id="f-equip" placeholder="Search Equipment" oninput="renderLog()">
           <select id="f-repair" onchange="renderLog()">
             <option value="">Repair: All</option>
+            <option value="__repairs__">Repairs (Tabs/Motor/Access/Repaired)</option>
             <option>Tabs</option><option>Motor</option><option>Access</option>
             <option>Decommissioned</option><option>Replaced</option><option>Repaired</option>
           </select>
@@ -258,7 +259,7 @@
    Shares Firebase with the main site but only reads/writes
    records scoped to hospitalId + subFolder = "Repairs & Decommissions".
    ========================================================= */
-const APP_VERSION = 'v1.3';
+const APP_VERSION = 'v1.4';
 const REPAIR_BUILDING = 'Repairs & Decommissions';
 const CLEAR_LOG_PIN = '1977';
 const STORAGE_KEY = 'fsd_repairs_records_v1';
@@ -294,6 +295,7 @@ function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':
 function escapeJs(s){ return String(s==null?'':s).replace(/["'\\]/g,'\\$&').replace(/\n/g,'\\n'); }
 function normDamperId(s){ return String(s||'').toUpperCase().replace(/^FSD[-\s]?/, '').replace(/[^A-Z0-9]/g,''); }
 function isComplete(r){ return !!(r.repairMade && String(r.repairMade).trim()); }
+const REPAIR_GROUP=['Tabs','Motor','Access','Repaired']; // all count as "repairs"
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._to); t._to=setTimeout(()=>t.classList.remove('show'),2600); }
 
 /* ---- Firebase ---- */
@@ -473,7 +475,7 @@ function renderDashboard(){
   const complete=scoped.filter(isComplete).length;
   const incomplete=total-complete;
   const decom=scoped.filter(r=>r.repairMade==='Decommissioned').length;
-  const repaired=scoped.filter(r=>r.repairMade==='Repaired').length;
+  const repaired=scoped.filter(r=>REPAIR_GROUP.includes(r.repairMade)).length;
   const replaced=scoped.filter(r=>r.repairMade==='Replaced').length;
   const pct=total?Math.round((complete/total)*100):0;
   document.getElementById('dash-title').textContent = currentHospitalDisplay + ' — Repairs & Decommissions';
@@ -510,7 +512,7 @@ function renderLog(){
       '__incomplete__':()=>{document.getElementById('f-status').value='__incomplete__';},
       'all':()=>{document.getElementById('f-status').value='';document.getElementById('f-repair').value='';},
       'Decommissioned':()=>{document.getElementById('f-repair').value='Decommissioned';},
-      'Repaired':()=>{document.getElementById('f-repair').value='Repaired';},
+      '__repairs__':()=>{document.getElementById('f-repair').value='__repairs__';},
       'Replaced':()=>{document.getElementById('f-repair').value='Replaced';}};
     if(map[pendingFilter]) map[pendingFilter]();
     pendingFilter=null;
@@ -526,7 +528,8 @@ function renderLog(){
   let filtered=scoped.filter(r=>{
     if(qD && !(r.damperId||'').toLowerCase().includes(qD)) return false;
     if(qE && !(r.equipmentName||'').toLowerCase().includes(qE)) return false;
-    if(fR && r.repairMade!==fR) return false;
+    if(fR==='__repairs__'){ if(!REPAIR_GROUP.includes(r.repairMade)) return false; }
+    else if(fR && r.repairMade!==fR) return false;
     if(!scopeMatch(r.cochranScope,fC)) return false;
     if(!scopeMatch(r.climatechScope,fCl)) return false;
     if(!scopeMatch(r.fireAlarm,fF)) return false;
@@ -584,22 +587,67 @@ function delRecord(id){
 /* ---- Report ---- */
 function openReport(r){
   const w=window.open('','_blank');
-  const f=(l,v)=>`<div style="margin-bottom:6px;"><b>${l}:</b> ${escapeHtml(v||'—')}</div>`;
+  const f=(l,v)=>`<div class="f"><span class="fl">${l}:</span><span class="fv">${escapeHtml(v||'\u2014')}</span></div>`;
+  const photosHtml=(r.photos&&r.photos.length)
+    ? r.photos.map(p=>`<img src="${p}" class="ph">`).join('')
+    : '<div class="ph-empty"></div><div class="ph-empty"></div>';
   w.document.write(`<html><head><title>${escapeHtml(r.damperId)}</title>
-    <style>body{font-family:Arial;padding:24px;max-width:800px;margin:0 auto;}h1{color:#1a237e;}
-    .sec{border:2px solid #c0392b;border-radius:6px;padding:12px;margin-top:16px;}
-    .sec h2{color:#c0392b;text-align:center;}</style></head><body>
-    <h1>ARCTIC — Repairs & Decommissions</h1>
-    <h2>${escapeHtml(r.damperId||'')}</h2>
-    ${f('Date of Inspection',r.dateTested)}${f('Damper Alias',r.damperAlias)}${f('Equipment Name',r.equipmentName)}
-    ${f('Room Name',r.roomName)}${f('Room Number',r.roomNumber)}${f('Floor',r.floor)}${f('Damper Size',r.damperSize)}
-    ${f('Damper Type',r.damperType)}${f('Installed In',r.installedIn)}${f('Requires Shutdown',r.requiresShutdown)}
-    ${f('Critical Area',r.criticalArea)}${f('Test',r.testResult)}
-    <div class="sec"><h2>Repair, Decommission & Replace</h2>
-    ${f('Repair Made',r.repairMade)}${f('Cochran Scope',r.cochranScope)}${f('Fire Alarm',r.fireAlarm)}
-    ${f('Climatech Scope',r.climatechScope)}${f('If Decommissioned, Size Matches Schedule?',r.sizeMatchesSchedule)}</div>
-    ${(r.photos&&r.photos.length)?`<div style="margin-top:16px;"><b>Photos:</b><div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">${r.photos.map(p=>`<img src="${p}" style="max-width:280px;max-height:360px;border:1px solid #999;border-radius:4px;">`).join('')}</div></div>`:''}
-    ${f('Notes',r.notes)}
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;padding:24px;max-width:860px;margin:0 auto;color:#1a1a1a;font-size:13px;}
+      h1{color:#1a237e;text-align:center;margin:0 0 2px;font-size:26px;letter-spacing:1px;}
+      .sub{text-align:center;font-weight:700;margin-bottom:18px;}
+      .cols{display:flex;gap:18px;align-items:flex-start;}
+      .col{flex:1;min-width:0;}
+      .col.right{max-width:200px;}
+      .f{margin-bottom:10px;}
+      .fl{font-weight:700;text-decoration:underline;display:block;}
+      .fv{display:block;border-bottom:1px solid #999;min-height:17px;padding:2px 0;}
+      .sec{border:2px solid #c0392b;border-radius:6px;padding:10px;margin-top:14px;}
+      .sec .h{color:#c0392b;text-align:center;font-weight:700;margin-bottom:10px;}
+      .ph{display:block;width:100%;max-width:190px;border:1px solid #333;margin-bottom:12px;}
+      .ph-empty{width:100%;max-width:190px;height:120px;border:1px solid #333;margin-bottom:12px;}
+      .notes{margin-top:18px;}
+      .notes .fl{margin-bottom:4px;}
+      .notes-box{border:1px solid #333;min-height:110px;padding:8px;white-space:pre-wrap;}
+      @media print{ body{padding:0;} }
+    </style></head><body>
+    <h1>ARCTIC</h1>
+    <div class="sub">Fire Damper Inspection \u2014 Repairs &amp; Decommissions</div>
+    <div class="cols">
+      <div class="col">
+        ${f('Date of Inspection',r.dateTested)}
+        ${f('Damper Name',r.damperId)}
+        ${f('Damper Alias',r.damperAlias)}
+        ${f('Equipment Name',r.equipmentName)}
+        ${f('Damper Type',r.damperType)}
+        ${f('Angle Ring',r.angleRing)}
+        ${f('Actuator Type',r.actuatorType)}
+        ${f('Indicator Light',r.indicatorLight)}
+      </div>
+      <div class="col">
+        <div class="f"><span class="fl">Damper Location</span></div>
+        ${f('Room Name',r.roomName)}
+        ${f('Room Number',r.roomNumber)}
+        ${f('Floor',r.floor)}
+        <div class="sec">
+          <div class="h">Repair, Decommission &amp; Replace Job</div>
+          ${f('Repair Made',r.repairMade)}
+          ${f('Cochran Scope',r.cochranScope)}
+          ${f('Fire Alarm',r.fireAlarm)}
+          ${f('Climatech Scope',r.climatechScope)}
+          ${f('If Decommissioned, Size Matches Schedule?',r.sizeMatchesSchedule)}
+        </div>
+      </div>
+      <div class="col right">
+        ${f('Damper Size',r.damperSize)}
+        ${f('Installed In',r.installedIn)}
+        ${f('Requires Shutdown?',r.requiresShutdown)}
+        ${f('Critical Area?',r.criticalArea)}
+        ${f('Test',r.testResult)}
+        ${photosHtml}
+      </div>
+    </div>
+    <div class="notes"><span class="fl">Notes:</span><div class="notes-box">${escapeHtml(r.notes||'')}</div></div>
     </body></html>`);
   w.document.close();
 }
