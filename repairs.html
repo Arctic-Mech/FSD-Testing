@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Arctic — Repairs & Decommissions</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{--bg:#f4f6fb;--panel:#fff;--panel2:#eef1f8;--navy:#1a237e;--gold:#b48c28;--red:#c0392b;
+    --green:#2e7d32;--line:#d8deea;--text:#1a1f2e;--text-dim:#6b7280;--mono:'SF Mono',Menlo,monospace;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);
+    color:var(--text);-webkit-font-smoothing:antialiased;padding-bottom:40px;}
+  .app{max-width:1400px;margin:0 auto;}
+  header.top{position:sticky;top:0;z-index:50;background:var(--navy);color:#fff;padding:12px 16px;
+    display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,0.15);}
+  header.top .logo{font-weight:800;font-size:18px;letter-spacing:1px;}
+  header.top .sub{font-size:11px;opacity:0.8;text-transform:uppercase;letter-spacing:1px;}
+  header.top .spacer{flex:1;}
+  .version-badge{font-size:10px;background:rgba(255,255,255,0.15);padding:3px 8px;border-radius:10px;}
+  nav.tabs{display:flex;gap:2px;background:var(--panel2);padding:4px;position:sticky;top:52px;z-index:40;}
+  nav.tabs button{flex:1;padding:12px;border:none;background:transparent;font-weight:600;font-size:13px;
+    color:var(--text-dim);cursor:pointer;border-radius:6px;}
+  nav.tabs button.active{background:var(--navy);color:#fff;}
+  main{padding:16px;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .card{background:var(--panel);border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:14px;}
+  h1{font-size:20px;margin-bottom:12px;}
+  h2{font-size:16px;margin-bottom:10px;}
+  label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:4px;font-weight:600;}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;
+    font-size:14px;font-family:inherit;background:#fff;margin-bottom:10px;}
+  .btn{padding:11px 16px;border:none;border-radius:7px;font-weight:600;font-size:13px;cursor:pointer;
+    background:var(--navy);color:#fff;}
+  .btn-outline{background:#fff;color:var(--navy);border:1px solid var(--navy);}
+  .btn-danger{background:var(--red);color:#fff;}
+  .btn-gold{background:var(--gold);color:#fff;}
+  .btn-xs{padding:4px 8px;font-size:10px;}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;}
+  .stat{background:var(--panel);border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer;}
+  .stat .num{font-size:28px;font-weight:800;color:var(--navy);}
+  .stat .lbl{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-top:4px;}
+  .stat.fail .num{color:var(--red);}
+  .stat.decom .num{color:var(--gold);}
+  .stat.done .num{color:var(--green);}
+  .progress-wrap{background:var(--panel);border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:14px;}
+  .progress-bar{height:12px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:8px 0;}
+  .progress-fill{height:100%;background:var(--green);transition:width 0.3s;}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .filters input,.filters select{width:auto;flex:1;min-width:120px;margin-bottom:0;}
+  .log-table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:8px;max-height:70vh;}
+  table.log-table{border-collapse:separate;border-spacing:0;width:100%;font-size:12px;white-space:nowrap;}
+  table.log-table th{background:var(--panel2);color:var(--navy);text-transform:uppercase;letter-spacing:0.5px;
+    font-size:10px;font-weight:700;padding:10px;text-align:left;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2;}
+  table.log-table td{padding:10px;border-bottom:1px solid var(--line);color:var(--text);background:var(--panel);}
+  table.log-table tbody tr:hover td{background:var(--panel2);}
+  table.log-table .sticky-col{position:sticky;left:0;z-index:3;box-shadow:2px 0 4px rgba(0,0,0,0.08);}
+  table.log-table th.sticky-col{z-index:4;background:var(--panel2);}
+  table.log-table .actions-cell{display:flex;gap:6px;}
+  table.log-table .actions-cell button{padding:6px 10px;font-size:11px;width:auto;}
+  .badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;}
+  .badge.pass{background:rgba(46,125,50,0.15);color:var(--green);}
+  .badge.fail{background:rgba(192,57,43,0.15);color:var(--red);}
+  .badge.decom{background:rgba(180,140,40,0.15);color:var(--gold);}
+  .empty{text-align:center;color:var(--text-dim);padding:40px 20px;font-size:13px;}
+  .did-link{color:var(--navy);text-decoration:underline;cursor:pointer;font-weight:700;}
+  .toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
+    padding:12px 20px;border-radius:8px;font-size:13px;z-index:500;opacity:0;transition:opacity 0.3s;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
+  .toast.show{opacity:1;}
+  .overlay{position:fixed;inset:0;z-index:600;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;}
+  .overlay .box{background:var(--panel);border-radius:12px;max-width:440px;width:100%;padding:22px;max-height:90vh;overflow-y:auto;}
+  .back-link{color:#fff;text-decoration:none;font-size:13px;opacity:0.85;display:flex;align-items:center;gap:4px;}
+  .wizard-progress{display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;}
+  .step-question{font-size:17px;font-weight:700;margin-bottom:14px;}
+  .opt-btn{display:flex;justify-content:space-between;align-items:center;padding:14px;border:1px solid var(--line);
+    border-radius:8px;background:#fff;font-size:15px;cursor:pointer;width:100%;text-align:left;}
+  .opt-btn.selected{border-color:var(--navy);background:var(--panel2);}
+  .opt-btn .chk{color:var(--navy);font-weight:700;}
+  .pin-overlay{position:fixed;inset:0;z-index:700;background:rgba(10,14,40,0.95);display:none;align-items:center;justify-content:center;}
+  .pin-box{background:var(--panel);border-radius:14px;padding:24px;width:300px;text-align:center;}
+  .pin-dots{display:flex;gap:12px;justify-content:center;margin:16px 0;}
+  .pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--navy);}
+  .pin-dot.filled{background:var(--navy);}
+  .pin-keys{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .pin-keys button{padding:16px;font-size:18px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;}
+  footer.sig{text-align:center;font-family:var(--mono);font-size:10px;color:var(--text-dim);padding:16px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <div class="logo">ARCTIC</div>
+      <div class="sub">Repairs &amp; Decommissions</div>
+    </div>
+    <div class="spacer"></div>
+    <a class="back-link" id="back-link" href="index.html">&#8592; Main Site</a>
+    <span class="version-badge" id="version-badge">v1.0</span>
+  </header>
+  <nav class="tabs" id="tabs">
+    <button class="active" data-view="dashboard" onclick="switchView('dashboard')">Dashboard</button>
+    <button data-view="inspect" onclick="switchView('inspect')">New Form</button>
+    <button data-view="log" onclick="switchView('log')">Project Log</button>
+  </nav>
+  <main>
+    <!-- DASHBOARD -->
+    <section class="view active" id="view-dashboard">
+      <h1 id="dash-title">Repairs &amp; Decommissions</h1>
+      <div class="stats-grid">
+        <div class="stat" data-filter="all"><div class="num" id="stat-total">0</div><div class="lbl">Total Forms</div></div>
+        <div class="stat done" data-filter="__complete__"><div class="num" id="stat-complete">0</div><div class="lbl">Complete</div></div>
+        <div class="stat fail" data-filter="__incomplete__"><div class="num" id="stat-incomplete">0</div><div class="lbl">Incomplete</div></div>
+        <div class="stat decom" data-filter="Decommissioned"><div class="num" id="stat-decom">0</div><div class="lbl">Decommissioned</div></div>
+        <div class="stat" data-filter="Repaired"><div class="num" id="stat-repaired">0</div><div class="lbl">Repaired</div></div>
+        <div class="stat" data-filter="Replaced"><div class="num" id="stat-replaced">0</div><div class="lbl">Replaced</div></div>
+      </div>
+      <div class="progress-wrap">
+        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;">
+          <span id="progress-pct">0% Complete</span>
+          <span id="progress-count">0 / 0</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      </div>
+      <div class="card">
+        <h2>Quick Actions</h2>
+        <div class="btn-row">
+          <button class="btn" onclick="switchView('inspect')">+ New Form</button>
+          <label class="btn btn-outline" style="cursor:pointer;">
+            &#128194; Import Forms (ZIP)
+            <input type="file" accept=".zip,application/zip" style="display:none;" id="import-zip-input">
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- INSPECT / NEW FORM -->
+    <section class="view" id="view-inspect">
+      <div class="card" id="inspect-card"></div>
+    </section>
+
+    <!-- LOG -->
+    <section class="view" id="view-log">
+      <div class="card">
+        <h2>Repairs &amp; Decommissions Log</h2>
+        <div class="filters">
+          <input type="text" id="f-damper" placeholder="Search Damper Name" oninput="renderLog()">
+          <input type="text" id="f-equip" placeholder="Search Equipment" oninput="renderLog()">
+          <select id="f-repair" onchange="renderLog()">
+            <option value="">Repair: All</option>
+            <option>Tabs</option><option>Motor</option><option>Access</option>
+            <option>Decommissioned</option><option>Replaced</option><option>Repaired</option>
+          </select>
+        </div>
+        <div class="filters">
+          <select id="f-cochran" onchange="renderLog()">
+            <option value="">Cochran: All</option>
+            <option value="Complete">Complete</option><option value="Incomplete">Incomplete</option>
+            <option value="N/A">N/A</option><option value="__blank__">Blank</option>
+          </select>
+          <select id="f-climatech" onchange="renderLog()">
+            <option value="">Climatech: All</option>
+            <option value="Complete">Complete</option><option value="Incomplete">Incomplete</option>
+            <option value="N/A">N/A</option><option value="__blank__">Blank</option>
+          </select>
+          <select id="f-firealarm" onchange="renderLog()">
+            <option value="">Fire Alarm: All</option>
+            <option value="Complete">Complete</option><option value="Incomplete">Incomplete</option>
+            <option value="N/A">N/A</option><option value="__blank__">Blank</option>
+          </select>
+          <select id="f-status" onchange="renderLog()">
+            <option value="">Status: All</option>
+            <option value="__complete__">Complete</option>
+            <option value="__incomplete__">Incomplete</option>
+          </select>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-outline" onclick="promptExportFormat()">Export Log</button>
+          <button class="btn btn-danger" onclick="promptClearLog()">Clear Log</button>
+        </div>
+      </div>
+      <div class="log-table-wrap">
+        <table class="log-table" id="log-table">
+          <thead><tr id="log-table-head"></tr></thead>
+          <tbody id="log-table-body"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="log-empty" style="display:none;"></div>
+    </section>
+  </main>
+  <footer class="sig" id="app-footer">ARCTIC Repairs &amp; Decommissions</footer>
+</div>
+
+<!-- PIN overlay -->
+<div class="pin-overlay" id="pin-overlay">
+  <div class="pin-box">
+    <h2 id="pin-title">Enter PIN</h2>
+    <p id="pin-desc" style="font-size:12px;color:var(--text-dim);">Enter PIN to continue</p>
+    <div class="pin-dots">
+      <div class="pin-dot" id="dot-0"></div><div class="pin-dot" id="dot-1"></div>
+      <div class="pin-dot" id="dot-2"></div><div class="pin-dot" id="dot-3"></div>
+    </div>
+    <div class="pin-keys">
+      <button onclick="pinKey('1')">1</button><button onclick="pinKey('2')">2</button><button onclick="pinKey('3')">3</button>
+      <button onclick="pinKey('4')">4</button><button onclick="pinKey('5')">5</button><button onclick="pinKey('6')">6</button>
+      <button onclick="pinKey('7')">7</button><button onclick="pinKey('8')">8</button><button onclick="pinKey('9')">9</button>
+      <button onclick="pinCancel()">✕</button><button onclick="pinKey('0')">0</button><button onclick="pinBackspace()">⌫</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   ARCTIC REPAIRS & DECOMMISSIONS — standalone app
+   Shares Firebase with the main site but only reads/writes
+   records scoped to hospitalId + subFolder = "Repairs & Decommissions".
+   ========================================================= */
+const APP_VERSION = 'v1.0';
+const REPAIR_BUILDING = 'Repairs & Decommissions';
+const CLEAR_LOG_PIN = '1977';
+const STORAGE_KEY = 'fsd_repairs_records_v1';
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBm5Jlqt4AQdEuN4RNK17cBa_Y4NXiQJuk",
+  authDomain: "fsd-testing-4b475.firebaseapp.com",
+  projectId: "fsd-testing-4b475",
+  storageBucket: "fsd-testing-4b475.firebasestorage.app",
+  messagingSenderId: "791633172365",
+  appId: "1:791633172365:web:16a9d04b2d90222e8d4fc4"
+};
+
+let db = null, firebaseReady = false;
+let records = loadLocal();
+let currentHospitalName = decodeURIComponent((location.hash||'').replace(/^#/,'')) || 'kaiser-sunnyside';
+// Turn a slug like "kaiser-sunnyside" into "Kaiser Sunnyside" for display until resolved
+let currentHospitalDisplay = currentHospitalName.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+let currentHospitalId = null; // resolved from hospitals collection
+let wizard = null;
+
+if(typeof pdfjsLib !== 'undefined'){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+}
+
+/* ---- local cache ---- */
+function loadLocal(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY))||[]; }catch(e){ return []; } }
+function saveLocal(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); }catch(e){} }
+
+/* ---- helpers ---- */
+function slugify(s){ return String(s||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeJs(s){ return String(s==null?'':s).replace(/["'\\]/g,'\\$&').replace(/\n/g,'\\n'); }
+function normDamperId(s){ return String(s||'').toUpperCase().replace(/^FSD[-\s]?/, '').replace(/[^A-Z0-9]/g,''); }
+function isComplete(r){ return !!(r.repairMade && String(r.repairMade).trim()); }
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._to); t._to=setTimeout(()=>t.classList.remove('show'),2600); }
+
+/* ---- Firebase ---- */
+async function initFirebase(){
+  try{
+    await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+    await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js');
+    if(typeof firebase==='undefined'){ showToast('Firebase failed to load'); return; }
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    firebaseReady = true;
+    // Resolve hospital id from the slug in the URL hash (main app sends slugify(name))
+    const snap = await db.collection('hospitals').get();
+    snap.forEach(d=>{
+      const data=d.data();
+      if(slugify(data.name)===currentHospitalName || data.name===currentHospitalName){
+        currentHospitalId = d.id;
+        currentHospitalDisplay = data.name; // use the real display name
+      }
+    });
+    // Listen to records
+    db.collection('records').onSnapshot(s=>{
+      const all = s.docs.map(d=>({...d.data(), _id:d.id}));
+      records = all.filter(r=>r.subFolder===REPAIR_BUILDING);
+      saveLocal();
+      refreshActive();
+    }, e=>console.error('records listener', e));
+    showToast('Cloud connected');
+  }catch(e){ console.error('Firebase init failed', e); showToast('Offline mode'); }
+}
+function loadScript(src){ return new Promise((res,rej)=>{ if(document.querySelector(`script[src="${src}"]`)){res();return;} const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load '+src)); document.head.appendChild(s); }); }
+
+async function fbSave(rec){ if(!firebaseReady) return; try{ const {_id,...data}=rec; await db.collection('records').doc(_id).set(data); }catch(e){ console.error('fbSave',e); } }
+async function fbDelete(id){ if(!firebaseReady) return; try{ await db.collection('records').doc(id).delete(); }catch(e){ console.error('fbDelete',e); } }
+
+function scopedRecords(){ return records.filter(r=>r.subFolder===REPAIR_BUILDING && (!currentHospitalId || r.hospitalId===currentHospitalId)); }
+
+/* ---- View switching ---- */
+function switchView(v){
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  if(v==='dashboard') renderDashboard();
+  if(v==='log') renderLog();
+  if(v==='inspect' && !wizard) renderIdEntry();
+}
+function refreshActive(){
+  const active = document.querySelector('.view.active');
+  if(!active) return;
+  if(active.id==='view-dashboard') renderDashboard();
+  if(active.id==='view-log') renderLog();
+}
+
+/* =========================================================
+   FORM STEPS
+   ========================================================= */
+const STEPS = [
+  { key:'damperId',        label:'Damper Name / ID',   type:'text' },
+  { key:'dateTested',      label:'Date of Inspection', type:'date', optional:true },
+  { key:'damperAlias',     label:'Damper Alias',       type:'text', optional:true },
+  { key:'equipmentName',   label:'Equipment Name',     type:'text', optional:true },
+  { key:'roomName',        label:'Room Name',          type:'text', optional:true },
+  { key:'roomNumber',      label:'Room Number',        type:'text', optional:true },
+  { key:'floor',           label:'Floor',              type:'text', optional:true },
+  { key:'damperSize',      label:'Damper Size',        type:'text', optional:true },
+  { key:'damperType',      label:'Damper Type',        type:'select', options:['Fire Smoke Damper','Fire Damper','Smoke Damper'], optional:true },
+  { key:'installedIn',     label:'Installed In',       type:'select', options:['Supply','Return','Exhaust'], optional:true },
+  { key:'requiresShutdown',label:'Requires Shutdown?', type:'select', options:['Yes','No'], optional:true },
+  { key:'criticalArea',    label:'Critical Area?',     type:'select', options:['Yes','No'], optional:true },
+  { key:'testResult',      label:'Test',               type:'select', options:['Pass','Fail','Decommissioned',"Can't Test"], optional:true },
+  { key:'repairMade',      label:'Repair Made',        type:'select', options:['Tabs','Motor','Access','Decommissioned','Replaced','Repaired'], optional:true },
+  { key:'cochranScope',    label:'Cochran Scope',      type:'select', options:['Complete','Incomplete','N/A'], optional:true },
+  { key:'fireAlarm',       label:'Fire Alarm',         type:'select', options:['Complete','Incomplete','N/A'], optional:true },
+  { key:'climatechScope',  label:'Climatech Scope',    type:'select', options:['Complete','Incomplete','N/A'], optional:true },
+  { key:'sizeMatchesSchedule', label:'If Decommissioned, Size Matches Schedule?', type:'select', options:['Yes','No','N/A'], optional:true },
+  { key:'notes',           label:'Notes',              type:'textarea', optional:true },
+];
+
+function renderIdEntry(){
+  const card = document.getElementById('inspect-card');
+  card.innerHTML = `<h2>New Repair / Decommission Form</h2>
+    <label>Damper Name / ID</label>
+    <input type="text" id="entry-damper-id" placeholder="Type damper name to begin..." autocomplete="off" style="font-size:18px;">`;
+  const btn = document.createElement('button');
+  btn.className='btn'; btn.textContent='Begin Form'; btn.style.marginTop='6px';
+  btn.addEventListener('click', beginWizard);
+  card.appendChild(btn);
+  const inp = document.getElementById('entry-damper-id');
+  inp.addEventListener('keydown',e=>{ if(e.key==='Enter') beginWizard(); });
+  inp.focus();
+}
+function beginWizard(){
+  const inp = document.getElementById('entry-damper-id');
+  const id = inp ? inp.value.trim() : '';
+  if(!id){ showToast('Enter a damper name first'); if(inp){inp.style.borderColor='var(--red)'; setTimeout(()=>inp.style.borderColor='',2000);} return; }
+  const existing = scopedRecords().find(r=>normDamperId(r.damperId)===normDamperId(id));
+  if(existing){ editRecord(existing._id); return; }
+  wizard = { data:{ damperId:id, dateTested:todayStr(), hospitalId:currentHospitalId, subFolder:REPAIR_BUILDING }, step:1, editingId:null };
+  renderStep();
+}
+function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+function renderStep(){
+  const card=document.getElementById('inspect-card');
+  const step=STEPS[wizard.step];
+  if(!step){ renderReview(); return; }
+  card.innerHTML=`<div class="wizard-progress"><span>Step ${wizard.step+1} / ${STEPS.length}</span><span>${escapeHtml(wizard.data.damperId||'')}</span></div>
+    <div class="step-question">${step.label}</div><div id="step-body"></div>
+    <div class="btn-row" id="step-btns" style="margin-top:14px;"></div>`;
+  const body=document.getElementById('step-body');
+  const btns=document.getElementById('step-btns');
+  if(step.type==='select'){
+    (step.options||[]).forEach(opt=>{
+      const b=document.createElement('button');
+      const sel=wizard.data[step.key]===opt;
+      b.className='opt-btn'+(sel?' selected':'');
+      b.innerHTML=`<span>${opt}</span><span class="chk">${sel?'✓':''}</span>`;
+      b.style.marginBottom='8px';
+      b.addEventListener('click',()=>{ wizard.data[step.key]=opt; nextStep(); });
+      body.appendChild(b);
+    });
+  } else if(step.type==='textarea'){
+    const ta=document.createElement('textarea'); ta.id='step-input'; ta.rows=5; ta.value=wizard.data[step.key]||''; body.appendChild(ta); ta.focus();
+  } else if(step.type==='date'){
+    const inp=document.createElement('input'); inp.type='date'; inp.id='step-input'; inp.value=wizard.data[step.key]||todayStr(); body.appendChild(inp);
+  } else {
+    const inp=document.createElement('input'); inp.type='text'; inp.id='step-input'; inp.value=wizard.data[step.key]||''; inp.placeholder='Enter '+step.label.toLowerCase();
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') nextFromInput(); });
+    body.appendChild(inp); inp.focus();
+  }
+  btns.appendChild(mkBtn(wizard.step>0?'Back':'Cancel','btn-outline',wizard.step>0?prevStep:cancelWizard));
+  if(step.optional && step.type==='select') btns.appendChild(mkBtn('Skip','btn-outline',nextStep));
+  if(step.type!=='select') btns.appendChild(mkBtn(step.optional?'Next (or skip)':'Next','btn',nextFromInput));
+}
+function mkBtn(label,cls,fn){ const b=document.createElement('button'); b.className='btn '+(cls||''); b.textContent=label; b.addEventListener('click',fn); return b; }
+function nextFromInput(){ const step=STEPS[wizard.step]; const inp=document.getElementById('step-input'); if(inp){ const v=inp.value.trim(); if(v||step.optional) wizard.data[step.key]=v; } nextStep(); }
+function nextStep(){ wizard.step++; renderStep(); }
+function prevStep(){ if(wizard.step>0){ wizard.step--; renderStep(); } }
+function cancelWizard(){ wizard=null; switchView('dashboard'); }
+
+function renderReview(){
+  const card=document.getElementById('inspect-card');
+  const d=wizard.data;
+  let rows='';
+  STEPS.forEach((s,idx)=>{ rows+=`<tr><td style="padding:4px 8px;font-weight:600;">${s.label} <span class="did-link" data-jump="${idx}">Edit</span></td><td style="padding:4px 8px;">${escapeHtml(d[s.key]||'—')}</td></tr>`; });
+  card.innerHTML=`<h2>Review Form</h2><table style="width:100%;border-collapse:collapse;">${rows}</table>
+    <div class="btn-row" style="margin-top:14px;"><button class="btn btn-outline" id="rv-cancel">Cancel</button><button class="btn btn-gold" id="rv-save">Save Form</button></div>`;
+  card.querySelectorAll('[data-jump]').forEach(el=>el.addEventListener('click',()=>{ wizard.step=parseInt(el.dataset.jump); renderStep(); }));
+  document.getElementById('rv-cancel').addEventListener('click',cancelWizard);
+  document.getElementById('rv-save').addEventListener('click',submitForm);
+}
+function editRecord(id){
+  const r=records.find(x=>x._id===id); if(!r) return;
+  wizard={ data:{...r}, step:-1+1, editingId:id }; wizard.step=0; renderStep();
+}
+function submitForm(){
+  const rec={...wizard.data, subFolder:REPAIR_BUILDING, hospitalId:currentHospitalId};
+  rec.importComplete = isComplete(rec);
+  if(wizard.editingId){ const i=records.findIndex(r=>r._id===wizard.editingId); if(i>=0){ rec._id=wizard.editingId; records[i]=rec; } }
+  else { rec._id='rec_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); records.push(rec); }
+  saveLocal(); fbSave(rec);
+  wizard=null; switchView('log'); showToast('Form saved');
+}
+
+/* =========================================================
+   DASHBOARD
+   ========================================================= */
+function renderDashboard(){
+  const scoped=scopedRecords();
+  const total=scoped.length;
+  const complete=scoped.filter(isComplete).length;
+  const incomplete=total-complete;
+  const decom=scoped.filter(r=>r.repairMade==='Decommissioned').length;
+  const repaired=scoped.filter(r=>r.repairMade==='Repaired').length;
+  const replaced=scoped.filter(r=>r.repairMade==='Replaced').length;
+  const pct=total?Math.round((complete/total)*100):0;
+  document.getElementById('dash-title').textContent = currentHospitalDisplay + ' — Repairs & Decommissions';
+  document.getElementById('stat-total').textContent=total;
+  document.getElementById('stat-complete').textContent=complete;
+  document.getElementById('stat-incomplete').textContent=incomplete;
+  document.getElementById('stat-decom').textContent=decom;
+  document.getElementById('stat-repaired').textContent=repaired;
+  document.getElementById('stat-replaced').textContent=replaced;
+  document.getElementById('progress-fill').style.width=pct+'%';
+  document.getElementById('progress-pct').textContent=pct+'% Complete';
+  document.getElementById('progress-count').textContent=`${complete} / ${total}`;
+  document.querySelectorAll('#view-dashboard .stat[data-filter]').forEach(card=>{
+    card.onclick=()=>{ pendingFilter=card.dataset.filter; switchView('log'); };
+  });
+}
+
+/* =========================================================
+   LOG
+   ========================================================= */
+let pendingFilter=null;
+const LOG_COLUMNS=[
+  ['Damper Name','damperId'],['Status','__status'],['Repair Made','repairMade'],
+  ['Cochran','cochranScope'],['Fire Alarm','fireAlarm'],['Climatech','climatechScope'],
+  ['Size Matches','sizeMatchesSchedule'],['Test','testResult'],['Date','dateTested'],
+  ['Alias','damperAlias'],['Equipment','equipmentName'],['Room Name','roomName'],
+  ['Room #','roomNumber'],['Floor','floor'],['Size','damperSize'],['Type','damperType'],
+  ['Installed In','installedIn'],['Shutdown','requiresShutdown'],['Critical','criticalArea'],['Notes','notes'],
+];
+function renderLog(){
+  const scoped=scopedRecords();
+  if(pendingFilter!==null){
+    const map={'__complete__':()=>{document.getElementById('f-status').value='__complete__';},
+      '__incomplete__':()=>{document.getElementById('f-status').value='__incomplete__';},
+      'all':()=>{document.getElementById('f-status').value='';document.getElementById('f-repair').value='';},
+      'Decommissioned':()=>{document.getElementById('f-repair').value='Decommissioned';},
+      'Repaired':()=>{document.getElementById('f-repair').value='Repaired';},
+      'Replaced':()=>{document.getElementById('f-repair').value='Replaced';}};
+    if(map[pendingFilter]) map[pendingFilter]();
+    pendingFilter=null;
+  }
+  const qD=document.getElementById('f-damper').value.trim().toLowerCase();
+  const qE=document.getElementById('f-equip').value.trim().toLowerCase();
+  const fR=document.getElementById('f-repair').value;
+  const fC=document.getElementById('f-cochran').value;
+  const fCl=document.getElementById('f-climatech').value;
+  const fF=document.getElementById('f-firealarm').value;
+  const fS=document.getElementById('f-status').value;
+  const scopeMatch=(v,f)=>{ if(!f) return true; const val=(v||'').trim(); if(f==='__blank__') return val===''; return val===f; };
+  let filtered=scoped.filter(r=>{
+    if(qD && !(r.damperId||'').toLowerCase().includes(qD)) return false;
+    if(qE && !(r.equipmentName||'').toLowerCase().includes(qE)) return false;
+    if(fR && r.repairMade!==fR) return false;
+    if(!scopeMatch(r.cochranScope,fC)) return false;
+    if(!scopeMatch(r.climatechScope,fCl)) return false;
+    if(!scopeMatch(r.fireAlarm,fF)) return false;
+    if(fS==='__complete__' && !isComplete(r)) return false;
+    if(fS==='__incomplete__' && isComplete(r)) return false;
+    return true;
+  });
+  const head=document.getElementById('log-table-head');
+  const body=document.getElementById('log-table-body');
+  const empty=document.getElementById('log-empty');
+  const table=document.getElementById('log-table');
+  head.innerHTML=LOG_COLUMNS.map(([h],i)=>`<th${i===0?' class="sticky-col"':''}>${h}</th>`).join('')+'<th>Actions</th>';
+  if(!filtered.length){ body.innerHTML=''; table.style.display='none'; empty.style.display='block'; empty.innerHTML='No forms match your filters.'; return; }
+  table.style.display=''; empty.style.display='none';
+  const badge={Pass:'pass',Fail:'fail',Decommissioned:'decom',"Can't Test":'fail'};
+  body.innerHTML=filtered.slice().reverse().map(r=>{
+    const cells=LOG_COLUMNS.map(([h,key])=>{
+      if(key==='__status') return `<td>${isComplete(r)?'<span class="badge pass">Complete</span>':'<span class="badge fail">Incomplete</span>'}</td>`;
+      if(key==='testResult') return `<td>${r.testResult?`<span class="badge ${badge[r.testResult]||''}">${r.testResult}</span>`:'—'}</td>`;
+      if(key==='damperId') return `<td class="sticky-col"><div style="display:flex;align-items:center;gap:8px;"><button class="btn btn-outline btn-xs" data-action="edit" data-id="${r._id}">Edit</button><span>${escapeHtml(r.damperId||'—')}</span></div></td>`;
+      return `<td>${escapeHtml(r[key]||'—')}</td>`;
+    }).join('');
+    return `<tr>${cells}<td><div class="actions-cell"><button class="btn btn-outline" data-action="open" data-id="${r._id}">Open</button><button class="btn btn-danger" data-action="del" data-id="${r._id}">Del</button></div></td></tr>`;
+  }).join('');
+  body.onclick=function(e){
+    const btn=e.target.closest('[data-action]'); if(!btn) return;
+    const id=btn.dataset.id; const r=records.find(x=>x._id===id);
+    if(btn.dataset.action==='edit') editRecord(id), switchView('inspect');
+    if(btn.dataset.action==='open' && r) openReport(r);
+    if(btn.dataset.action==='del') delRecord(id);
+  };
+}
+function delRecord(id){
+  if(!confirm('Delete this form permanently?')) return;
+  records=records.filter(r=>r._id!==id); saveLocal(); fbDelete(id); renderLog(); renderDashboard();
+}
+
+/* ---- Report ---- */
+function openReport(r){
+  const w=window.open('','_blank');
+  const f=(l,v)=>`<div style="margin-bottom:6px;"><b>${l}:</b> ${escapeHtml(v||'—')}</div>`;
+  w.document.write(`<html><head><title>${escapeHtml(r.damperId)}</title>
+    <style>body{font-family:Arial;padding:24px;max-width:800px;margin:0 auto;}h1{color:#1a237e;}
+    .sec{border:2px solid #c0392b;border-radius:6px;padding:12px;margin-top:16px;}
+    .sec h2{color:#c0392b;text-align:center;}</style></head><body>
+    <h1>ARCTIC — Repairs & Decommissions</h1>
+    <h2>${escapeHtml(r.damperId||'')}</h2>
+    ${f('Date of Inspection',r.dateTested)}${f('Damper Alias',r.damperAlias)}${f('Equipment Name',r.equipmentName)}
+    ${f('Room Name',r.roomName)}${f('Room Number',r.roomNumber)}${f('Floor',r.floor)}${f('Damper Size',r.damperSize)}
+    ${f('Damper Type',r.damperType)}${f('Installed In',r.installedIn)}${f('Requires Shutdown',r.requiresShutdown)}
+    ${f('Critical Area',r.criticalArea)}${f('Test',r.testResult)}
+    <div class="sec"><h2>Repair, Decommission & Replace</h2>
+    ${f('Repair Made',r.repairMade)}${f('Cochran Scope',r.cochranScope)}${f('Fire Alarm',r.fireAlarm)}
+    ${f('Climatech Scope',r.climatechScope)}${f('If Decommissioned, Size Matches Schedule?',r.sizeMatchesSchedule)}</div>
+    ${f('Notes',r.notes)}
+    </body></html>`);
+  w.document.close();
+}
+
+/* =========================================================
+   ZIP IMPORT
+   ========================================================= */
+const PDF_FIELD_MAP={
+  'Angle Ring Notes(1)':'dateTested','Angle Ring Notes(2)':'damperId','Angle Ring Notes(3)':'damperAlias',
+  'Angle Ring Notes(4)':'equipmentName','Angle Ring Notes(5)':'roomName','Angle Ring Notes(6)':'damperSize',
+  'Angle Ring Notes(8)':'roomNumber','Damper Type':'damperType','Angle Ring':'angleRing','Angle Ring Notes':'angleRingNotes',
+  'ActuatorType':'actuatorType','Indicator Light':'indicatorLight','Floor':'floor','Installed In':'installedIn',
+  'Requires Shutdown':'requiresShutdown','Critical Area ':'criticalArea','Test':'testResult',
+  'Floor(1)':'repairMade','Floor(2)':'cochranScope','Floor(3)':'climatechScope','Floor(5)':'fireAlarm',
+  'Floor(4)':'sizeMatchesSchedule','Notes':'notes',
+};
+function cleanDamperName(fn){ let n=fn.split('/').pop().replace(/\.pdf$/i,'').replace(/^\.+/,''); return n.trim(); }
+async function readPdfFields(buf){
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise; const out={};
+  for(let p=1;p<=pdf.numPages;p++){ const page=await pdf.getPage(p); const annots=await page.getAnnotations();
+    annots.forEach(a=>{ if(a.fieldName==null) return; let v=a.fieldValue; if(Array.isArray(v)) v=v.join(', '); if(v==null) v=''; out[a.fieldName]=String(v).trim(); }); }
+  return out;
+}
+function pdfToRecord(fields,name){ const rec={}; Object.entries(PDF_FIELD_MAP).forEach(([pk,rk])=>{ if(fields[pk]) rec[rk]=fields[pk].trim(); }); rec.damperId=name; return rec; }
+async function handleZipImport(ev){
+  const file=ev.target.files&&ev.target.files[0]; if(!file) return;
+  if(typeof JSZip==='undefined'){ showToast('ZIP lib not loaded'); return; }
+  let banner=document.getElementById('imp-banner');
+  if(!banner){ banner=document.createElement('div'); banner.id='imp-banner'; banner.style.cssText='position:fixed;top:0;left:0;right:0;z-index:800;background:#1a237e;color:#fff;padding:12px;text-align:center;font-weight:600;font-size:13px;'; document.body.appendChild(banner); }
+  const prog=m=>banner.textContent=m; const fail=m=>{ banner.style.background='#c0392b'; prog(m); setTimeout(()=>banner.remove(),6000); };
+  try{
+    prog('Reading ZIP...');
+    const zip=await JSZip.loadAsync(file); const entries=[];
+    zip.forEach((path,e)=>{ if(!e.dir && /\.pdf$/i.test(path) && !path.startsWith('__MACOSX')) entries.push(e); });
+    if(!entries.length){ fail('No PDFs in ZIP'); return; }
+    let added=0,updated=0,incomplete=0;
+    for(let i=0;i<entries.length;i++){
+      const e=entries[i]; const name=cleanDamperName(e.name);
+      prog(`Importing ${i+1}/${entries.length}: ${name}`);
+      let rec;
+      try{ const buf=await e.async('arraybuffer'); rec=pdfToRecord(await readPdfFields(buf),name); }
+      catch(err){ rec={damperId:name}; }
+      rec.hospitalId=currentHospitalId; rec.subFolder=REPAIR_BUILDING; rec.importComplete=isComplete(rec);
+      if(!rec.importComplete) incomplete++;
+      const ex=records.find(r=>r.subFolder===REPAIR_BUILDING && normDamperId(r.damperId)===normDamperId(name));
+      if(ex){ Object.assign(ex,rec,{_id:ex._id}); saveLocal(); fbSave(ex); updated++; }
+      else { rec._id='rec_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); records.push(rec); saveLocal(); fbSave(rec); added++; }
+    }
+    banner.style.background='#1a237e'; prog(`✓ ${added} new, ${updated} updated, ${incomplete} incomplete`);
+    setTimeout(()=>banner.remove(),5000);
+    if(ev.target) try{ev.target.value='';}catch(e){}
+    renderLog(); renderDashboard();
+  }catch(e){ console.error(e); fail('Import failed: '+(e.message||e)); }
+}
+
+/* =========================================================
+   EXPORT
+   ========================================================= */
+const EXPORT_COLS=[['Damper Name','damperId'],['Complete','__complete'],['Date','dateTested'],['Alias','damperAlias'],
+  ['Equipment','equipmentName'],['Room Name','roomName'],['Room Number','roomNumber'],['Floor','floor'],['Size','damperSize'],
+  ['Damper Type','damperType'],['Installed In','installedIn'],['Requires Shutdown','requiresShutdown'],['Critical Area','criticalArea'],
+  ['Test','testResult'],['Repair Made','repairMade'],['Cochran Scope','cochranScope'],['Fire Alarm','fireAlarm'],
+  ['Climatech Scope','climatechScope'],['Size Matches Schedule','sizeMatchesSchedule'],['Notes','notes']];
+function buildRows(){ return scopedRecords().map(r=>{ const o={}; EXPORT_COLS.forEach(([h,k])=>{ o[h]= k==='__complete'?(isComplete(r)?'Yes':'No'):(r[k]||''); }); return o; }); }
+function promptExportFormat(){
+  if(!scopedRecords().length){ showToast('No forms to export'); return; }
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.innerHTML=`<div class="box" style="text-align:center;"><h2>Export Log</h2><p style="font-size:13px;color:var(--text-dim);margin-bottom:14px;">Choose a format.</p>
+    <div class="btn-row" style="flex-direction:column;"><button class="btn" data-f="xlsx">Excel (.xlsx)</button><button class="btn btn-outline" data-f="csv">CSV (.csv)</button><button class="btn btn-outline" data-f="cancel" style="margin-top:6px;">Cancel</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{ const b=e.target.closest('[data-f]'); if(!b) return; const f=b.dataset.f; ov.remove(); if(f==='xlsx') expXlsx(); else if(f==='csv') expCsv(); });
+}
+function expXlsx(){ const ws=XLSX.utils.json_to_sheet(buildRows()); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Repairs'); XLSX.writeFile(wb,'Repairs_Decommissions_Log.xlsx'); }
+function expCsv(){ const rows=buildRows(); if(!rows.length) return; const cols=Object.keys(rows[0]); const csv=[cols.join(',')].concat(rows.map(r=>cols.map(c=>{ let v=String(r[c]==null?'':r[c]); if(/[",\n]/.test(v)) v='"'+v.replace(/"/g,'""')+'"'; return v; }).join(','))).join('\n'); const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='Repairs_Decommissions_Log.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+
+/* =========================================================
+   CLEAR LOG (PIN 1977 + confirm)
+   ========================================================= */
+function promptClearLog(){
+  const scoped=scopedRecords();
+  if(!scoped.length){ showToast('Log is already empty'); return; }
+  openPinGate('Clear Log','Enter PIN to clear the log',()=>{
+    if(!confirm(`Permanently delete ALL ${scoped.length} forms in Repairs & Decommissions?\n\nThis cannot be undone.`)) return;
+    if(!confirm('Are you absolutely sure? This wipes every form in this log.')) return;
+    const ids=scoped.map(r=>r._id);
+    ids.forEach(id=>fbDelete(id));
+    records=records.filter(r=>!ids.includes(r._id));
+    saveLocal(); renderLog(); renderDashboard();
+    showToast(`Cleared ${ids.length} forms`);
+  }, CLEAR_LOG_PIN);
+}
+
+/* ---- PIN ---- */
+let pinBuffer='', pinCallback=null, pinExpected=null;
+function openPinGate(title,desc,cb,pin){ pinBuffer=''; pinCallback=cb; pinExpected=pin||CLEAR_LOG_PIN; updateDots(); document.getElementById('pin-title').textContent=title; document.getElementById('pin-desc').textContent=desc; document.getElementById('pin-overlay').style.display='flex'; }
+function pinKey(d){ if(pinBuffer.length>=4) return; pinBuffer+=d; updateDots(); if(pinBuffer.length===4) setTimeout(checkPin,120); }
+function pinBackspace(){ pinBuffer=pinBuffer.slice(0,-1); updateDots(); }
+function pinCancel(){ document.getElementById('pin-overlay').style.display='none'; pinBuffer=''; pinCallback=null; updateDots(); }
+function updateDots(){ for(let i=0;i<4;i++){ const d=document.getElementById('dot-'+i); if(d) d.className='pin-dot'+(i<pinBuffer.length?' filled':''); } }
+function checkPin(){ if(pinBuffer===pinExpected){ document.getElementById('pin-overlay').style.display='none'; pinBuffer=''; updateDots(); const cb=pinCallback; pinCallback=null; if(cb) cb(); } else { for(let i=0;i<4;i++){ const d=document.getElementById('dot-'+i); if(d){ d.style.background='#c0392b'; d.style.borderColor='#c0392b'; } } setTimeout(()=>{ pinBuffer=''; updateDots(); for(let i=0;i<4;i++){ const d=document.getElementById('dot-'+i); if(d){ d.style.background=''; d.style.borderColor=''; } } },500); } }
+
+/* ---- INIT ---- */
+document.getElementById('version-badge').textContent=APP_VERSION;
+document.getElementById('import-zip-input').addEventListener('change',handleZipImport);
+renderDashboard();
+initFirebase();
+</script>
+</body>
+</html>
