@@ -107,13 +107,15 @@
     </div>
     <div class="spacer"></div>
     <a class="back-link" id="back-link" href="index.html">&#8592; Main Site</a>
-    <span class="version-badge" id="version-badge">v1.6</span>
+    <span class="version-badge" id="version-badge">v1.7</span>
   </header>
   <nav class="tabs" id="tabs">
     <button class="active" data-view="dashboard" onclick="switchView('dashboard')">Dashboard</button>
     <button data-view="inspect" onclick="switchView('inspect')">New Form</button>
     <button data-view="log" onclick="switchView('log')">Project Log</button>
     <button data-view="map" onclick="switchView('map')">Map</button>
+    <button data-view="bas" onclick="switchView('bas')">BAS</button>
+    <button data-view="schedule" onclick="switchView('schedule')">Schedule</button>
   </nav>
   <main>
     <!-- DASHBOARD -->
@@ -199,6 +201,7 @@
         </div>
         <div class="filters" style="margin-bottom:0;">
           <button class="btn btn-outline btn-sm" onclick="clearFilters()" style="margin:0;">Clear Filters</button>
+          <button class="btn btn-outline btn-sm" onclick="restoreCols()" style="margin:0;">Show All Columns</button>
         </div>
         <div class="btn-row">
           <button class="btn btn-outline" onclick="promptExportFormat()">Export Log</button>
@@ -248,6 +251,52 @@
         </div>
       </div>
     </section>
+
+    <!-- BAS -->
+    <section class="view" id="view-bas">
+      <div class="card">
+        <h2>BAS Name Changes</h2>
+        <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Dampers we renamed. "Renamed in BAS?" tracks whether the change was made on the BAS system. Tap that cell to toggle Y / N / N/A.</p>
+        <div class="filters">
+          <input type="text" id="bas-search" placeholder="Search any name/alias" oninput="renderBas()">
+          <select id="bas-filter" onchange="renderBas()">
+            <option value="">BAS: All</option>
+            <option value="Y">Renamed (Y)</option>
+            <option value="N">Not yet (N / blank)</option>
+            <option value="N/A">N/A</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="clearBasFilters()" style="margin:0;">Clear</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary btn-sm" onclick="openBasAdd()">+ Add Entry</button>
+          <label class="btn btn-outline btn-sm" style="cursor:pointer;">
+            &#128194; Import Excel
+            <input type="file" accept=".xlsx,.xls" style="display:none;" id="bas-xlsx-input">
+          </label>
+          <button class="btn btn-outline btn-sm" onclick="exportBas()">Export Excel</button>
+        </div>
+        <div id="bas-count" style="font-size:12px;font-weight:700;color:var(--navy);margin-top:10px;"></div>
+      </div>
+      <div class="log-table-wrap">
+        <table class="log-table">
+          <thead><tr id="bas-head"></tr></thead>
+          <tbody id="bas-body"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="bas-empty" style="display:none;"></div>
+    </section>
+
+    <!-- SCHEDULE -->
+    <section class="view" id="view-schedule">
+      <div class="card">
+        <h2>Live Schedule</h2>
+        <p style="font-size:13px;color:var(--text-dim);margin:0 0 12px;">This opens the shared Excel schedule. Because it's a private SharePoint file, it opens in a new tab (you'll use your Arctic login).</p>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="openSchedule()">Open Live Schedule &#8599;</button>
+        </div>
+        <div id="schedule-embed" style="margin-top:14px;"></div>
+      </div>
+    </section>
   </main>
   <footer class="sig" id="app-footer">ARCTIC Repairs &amp; Decommissions</footer>
 </div>
@@ -278,7 +327,7 @@
    Shares Firebase with the main site but only reads/writes
    records scoped to hospitalId + subFolder = "Repairs & Decommissions".
    ========================================================= */
-const APP_VERSION = 'v1.6';
+const APP_VERSION = 'v1.7';
 const REPAIR_BUILDING = 'Repairs & Decommissions';
 const CLEAR_LOG_PIN = '1977';
 const STORAGE_KEY = 'fsd_repairs_records_v1';
@@ -343,6 +392,7 @@ async function initFirebase(){
     // Load this job's map index now that the hospital is resolved, then
     // refresh whichever view is showing (log flags depend on map labels)
     loadMapData().then(()=>refreshActive()).catch(()=>{});
+    basStartListener();
     // Listen to records
     db.collection('records').onSnapshot(s=>{
       const all = s.docs.map(d=>({...d.data(), _id:d.id}));
@@ -372,6 +422,8 @@ function switchView(v){
   if(v==='log') renderLog();
   if(v==='inspect' && !wizard) renderIdEntry();
   if(v==='map') renderMap();
+  if(v==='bas') renderBas();
+  if(v==='schedule') renderSchedule();
 }
 function refreshActive(){
   const active = document.querySelector('.view.active');
@@ -538,6 +590,17 @@ function clearFilters(){
   pendingFilter=null;
   renderLog();
 }
+const HIDDEN_COLS_KEY='fsd_repairs_hidden_cols_v1';
+function getHiddenCols(){ try{ return JSON.parse(localStorage.getItem(HIDDEN_COLS_KEY))||[]; }catch(e){ return []; } }
+function setHiddenCols(arr){ try{ localStorage.setItem(HIDDEN_COLS_KEY, JSON.stringify(arr)); }catch(e){} }
+function hideCol(key){
+  if(key==='damperId'){ showToast('The name column can\u2019t be hidden'); return; }
+  const h=getHiddenCols();
+  if(!h.includes(key)) h.push(key);
+  setHiddenCols(h);
+  renderLog();
+}
+function restoreCols(){ setHiddenCols([]); renderLog(); showToast('All columns shown'); }
 function renderLog(){
   const scoped=scopedRecords();
   if(pendingFilter!==null){
@@ -592,14 +655,21 @@ function renderLog(){
   // Filtered quantity display
   const cnt=document.getElementById('log-count');
   if(cnt) cnt.textContent=`Showing ${filtered.length} of ${scoped.length} forms`;
-  head.innerHTML=LOG_COLUMNS.map(([h],i)=>`<th${i===0?' class="sticky-col"':''}>${h}</th>`).join('')+'<th>Actions</th>';
+  const hidden=getHiddenCols();
+  const visibleCols=LOG_COLUMNS.filter(([h,k])=>!hidden.includes(k));
+  head.innerHTML=visibleCols.map(([h,k],i)=>`<th${i===0?' class="sticky-col"':''} data-col="${k}" title="Click to hide this column" style="cursor:pointer;">${h}<span style="opacity:0.4;font-size:9px;"> ✕</span></th>`).join('')+'<th>Actions</th>';
+  head.onclick=function(e){
+    const th=e.target.closest('th[data-col]');
+    if(!th) return;
+    hideCol(th.dataset.col);
+  };
   if(!filtered.length){ body.innerHTML=''; table.style.display='none'; empty.style.display='block'; empty.innerHTML='No forms match your filters.'; return; }
   table.style.display=''; empty.style.display='none';
   const badge={Pass:'pass',Fail:'fail',Decommissioned:'decom',"Can't Test":'fail'};
   // Pair up multi-round dampers: the newest (plain name) is the main row;
   // older rounds ("- Round N") collapse into a dropdown under it.
   const buildRow=(r, isSub)=>{
-    const cells=LOG_COLUMNS.map(([h,key])=>{
+    const cells=visibleCols.map(([h,key])=>{
       if(key==='__status') return `<td class="editable" data-ek="__status" data-id="${r._id}">${isComplete(r)?'<span class="badge pass">Complete</span>':'<span class="badge fail">Incomplete</span>'}</td>`;
       if(key==='__photos') return `<td>${(r.photos||[]).length}/${MAX_PHOTOS}</td>`;
       if(key==='testResult') return `<td class="editable" data-ek="testResult" data-id="${r._id}">${r.testResult?`<span class="badge ${badge[r.testResult]||''}">${r.testResult}</span>`:'—'}</td>`;
@@ -1467,14 +1537,193 @@ function initMapControls(){
   }
 }
 
+/* =========================================================
+   BAS NAME-CHANGE LIST  (synced via Firestore doc "bas/<hospitalId>")
+   Tracks dampers we renamed and whether the change was pushed to BAS.
+   ========================================================= */
+let basList = [];
+const BAS_STORAGE = 'fsd_repairs_bas_v1';
+const BAS_COLS = [
+  ["Other Alias's",'alias'],['Old Name','oldName'],['New Name','newName'],
+  ['LVL','lvl'],['Area','area'],['Type','type'],['Renamed in BAS?','bas'],
+];
+function basLoadLocal(){ try{ return JSON.parse(localStorage.getItem(BAS_STORAGE))||[]; }catch(e){ return []; } }
+function basSaveLocal(){ try{ localStorage.setItem(BAS_STORAGE, JSON.stringify(basList)); }catch(e){} }
+function basDocId(){ return (currentHospitalId||'unknown'); }
+async function basSaveCloud(){
+  basSaveLocal();
+  if(!firebaseReady) return;
+  try{ await db.collection('bas').doc(basDocId()).set({ list: basList, updatedAt: Date.now() }); }
+  catch(e){ console.error('basSaveCloud',e); showToast('BAS save failed - check connection'); }
+}
+function basStartListener(){
+  if(!firebaseReady) return;
+  db.collection('bas').doc(basDocId()).onSnapshot(doc=>{
+    if(doc.exists && Array.isArray(doc.data().list)){
+      basList = doc.data().list;
+      basSaveLocal();
+      const v=document.getElementById('view-bas');
+      if(v && v.classList.contains('active')) renderBas();
+    }
+  }, e=>console.error('bas listener',e));
+}
+function basStatusNorm(v){
+  const s=(v||'').trim().toUpperCase();
+  if(s==='Y'||s==='YES') return 'Y';
+  if(s==='N/A'||s==='NA') return 'N/A';
+  if(s==='N'||s==='NO') return 'N';
+  return ''; // blank = not yet done
+}
+function clearBasFilters(){
+  const s=document.getElementById('bas-search'); if(s) s.value='';
+  const f=document.getElementById('bas-filter'); if(f) f.value='';
+  renderBas();
+}
+function renderBas(){
+  const head=document.getElementById('bas-head');
+  const body=document.getElementById('bas-body');
+  const empty=document.getElementById('bas-empty');
+  const cnt=document.getElementById('bas-count');
+  const q=(document.getElementById('bas-search').value||'').trim().toLowerCase();
+  const bf=document.getElementById('bas-filter').value;
+  let rows=basList.map((e,i)=>({e,i}));
+  if(q) rows=rows.filter(({e})=>[e.alias,e.oldName,e.newName,e.lvl,e.area,e.type].some(v=>String(v||'').toLowerCase().includes(q)));
+  if(bf){
+    rows=rows.filter(({e})=>{
+      const st=basStatusNorm(e.bas);
+      if(bf==='N') return st===''||st==='N';
+      return st===bf;
+    });
+  }
+  head.innerHTML=BAS_COLS.map(([h])=>`<th>${h}</th>`).join('')+'<th>Actions</th>';
+  if(cnt) cnt.textContent=`Showing ${rows.length} of ${basList.length} entries`;
+  if(!rows.length){ body.innerHTML=''; empty.style.display='block'; empty.innerHTML= basList.length?'No entries match.':'No BAS list yet. Import the Excel or add entries.'; return; }
+  empty.style.display='none';
+  const badgeFor=st=> st==='Y'?'<span class="badge pass">Y</span>' : st==='N/A'?'<span class="badge" style="background:#e5e7eb;color:#555;">N/A</span>' : '<span class="badge fail">Not yet</span>';
+  body.innerHTML=rows.map(({e,i})=>{
+    const cells=BAS_COLS.map(([h,key])=>{
+      if(key==='bas'){ return `<td class="bas-cell" data-i="${i}" style="cursor:pointer;" title="Click to toggle">${badgeFor(basStatusNorm(e.bas))}</td>`; }
+      return `<td class="bas-edit" data-i="${i}" data-k="${key}" style="cursor:pointer;">${escapeHtml(String(e[key]||'')||'—')}</td>`;
+    }).join('');
+    return `<tr>${cells}<td><button class="btn btn-danger btn-xs" data-del="${i}">Del</button></td></tr>`;
+  }).join('');
+  body.onclick=function(ev){
+    const del=ev.target.closest('[data-del]');
+    if(del){ const i=+del.dataset.del; if(confirm(`Delete BAS entry "${basList[i].newName||basList[i].oldName}"?`)){ basList.splice(i,1); basSaveCloud(); renderBas(); } return; }
+    const bc=ev.target.closest('.bas-cell');
+    if(bc){
+      const i=+bc.dataset.i;
+      const cur=basStatusNorm(basList[i].bas);
+      const next= cur===''?'Y' : cur==='Y'?'N/A' : cur==='N/A'?'N' : '';
+      basList[i].bas=next;
+      basSaveCloud(); renderBas();
+      return;
+    }
+    const ec=ev.target.closest('.bas-edit');
+    if(ec){ openBasCellEdit(+ec.dataset.i, ec.dataset.k); }
+  };
+}
+function openBasCellEdit(i,key){
+  const e=basList[i]; if(!e) return;
+  const labels={alias:"Other Alias's",oldName:'Old Name',newName:'New Name',lvl:'LVL',area:'Area',type:'Type'};
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:360px;width:100%;padding:20px;">
+    <h2 style="margin:0 0 12px;font-size:16px;">${labels[key]||key}</h2>
+    <input type="text" id="bce-input" value="${escapeHtml(String(e[key]||''))}" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">
+    <div class="btn-row" style="margin-top:14px;"><button class="btn btn-outline" id="bce-cancel">Cancel</button><button class="btn" id="bce-save">Save</button></div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector('#bce-input'); inp.focus();
+  ov.querySelector('#bce-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#bce-save').onclick=()=>{ e[key]=(inp.value||'').trim(); basSaveCloud(); ov.remove(); renderBas(); showToast('Updated'); };
+}
+function openBasAdd(){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  const fields=[['newName','New Name'],['oldName','Old Name'],['alias',"Other Alias's"],['lvl','LVL'],['area','Area'],['type','Type']];
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:85vh;overflow:auto;">
+    <h2 style="margin:0 0 12px;font-size:16px;">Add BAS Entry</h2>
+    ${fields.map(([k,l])=>`<div class="field"><label>${l}</label><input type="text" id="ba-${k}"></div>`).join('')}
+    <div class="field"><label>Renamed in BAS?</label><select id="ba-bas"><option value="">Not yet</option><option value="Y">Y</option><option value="N/A">N/A</option></select></div>
+    <div class="btn-row" style="margin-top:6px;"><button class="btn btn-outline" id="ba-cancel">Cancel</button><button class="btn btn-primary" id="ba-save">Add</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#ba-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#ba-save').onclick=()=>{
+    const g=k=>(document.getElementById('ba-'+k).value||'').trim();
+    const entry={alias:g('alias'),oldName:g('oldName'),newName:g('newName'),lvl:g('lvl'),area:g('area'),type:g('type'),bas:g('bas')};
+    if(!entry.newName && !entry.oldName){ showToast('Enter at least a name'); return; }
+    basList.push(entry); basSaveCloud(); ov.remove(); renderBas(); showToast('Entry added');
+  };
+}
+async function handleBasXlsx(ev){
+  const file=ev.target.files&&ev.target.files[0];
+  if(!file) return;
+  if(typeof XLSX==='undefined'){ showToast('Excel library not loaded'); return; }
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const arr=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    // find header row (contains "New Name")
+    let hi=arr.findIndex(row=>row.some(c=>String(c).trim().toLowerCase()==='new name'));
+    if(hi<0) hi=1;
+    const header=arr[hi].map(c=>String(c).trim().toLowerCase());
+    const col=name=>header.findIndex(h=>h===name);
+    const ci={alias:col("other alias's"),old:col('old name'),nw:col('new name'),lvl:col('lvl'),area:col('area'),type:col('type'),bas:col('renamed in bas?')};
+    const imported=[];
+    for(let r=hi+1;r<arr.length;r++){
+      const row=arr[r]; if(!row||!row.some(c=>String(c).trim())) continue;
+      const get=idx=> idx>=0 && row[idx]!==undefined ? String(row[idx]).trim() : '';
+      const entry={alias:get(ci.alias),oldName:get(ci.old),newName:get(ci.nw),lvl:get(ci.lvl),area:get(ci.area),type:get(ci.type),bas:get(ci.bas)};
+      if(!entry.newName && !entry.oldName) continue;
+      imported.push(entry);
+    }
+    if(!imported.length){ showToast('No rows found in that Excel'); return; }
+    if(basList.length && !confirm(`Replace the current ${basList.length} BAS entries with ${imported.length} from this file?\n\n(Cancel to merge/append instead)`)){
+      basList=basList.concat(imported);
+    } else {
+      basList=imported;
+    }
+    await basSaveCloud(); renderBas();
+    showToast(`Imported ${imported.length} entries`);
+  }catch(e){ console.error('bas import',e); showToast('Import failed: '+(e.message||e)); }
+  try{ev.target.value='';}catch(e){}
+}
+function exportBas(){
+  if(!basList.length){ showToast('Nothing to export'); return; }
+  const aoa=[BAS_COLS.map(([h])=>h)];
+  basList.forEach(e=>aoa.push(BAS_COLS.map(([h,k])=>e[k]||'')));
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'BAS Names');
+  XLSX.writeFile(wb,'BAS_Name_Changes.xlsx');
+}
+
+/* =========================================================
+   SCHEDULE  (live shared Excel via SharePoint)
+   ========================================================= */
+const SCHEDULE_URL = 'https://arcticsheetmetal-my.sharepoint.com/:x:/g/personal/jareneells_arctic_biz/IQC5LPe4NvwuSJSUrp7FUHyFAX5bSjzAbiGc90b0goMhNw8?e=hYnY8t';
+function openSchedule(){ window.open(SCHEDULE_URL,'_blank'); }
+function renderSchedule(){
+  const el=document.getElementById('schedule-embed');
+  if(!el) return;
+  // Try an inline embed; SharePoint personal links usually block framing, so we
+  // show the frame but also keep the "Open" button as the reliable path.
+  el.innerHTML=`<iframe src="${SCHEDULE_URL.replace('?e=','action=embedview&e=')}" style="width:100%;height:60vh;border:1px solid var(--line);border-radius:8px;" onload="this.dataset.ok=1"></iframe>
+    <p style="font-size:11px;color:var(--text-dim);margin-top:6px;">If the schedule doesn't appear above, use "Open Live Schedule" — SharePoint requires sign-in and may block embedding.</p>`;
+}
+
 /* ---- INIT ---- */
 document.getElementById('version-badge').textContent=APP_VERSION;
 document.getElementById('import-zip-input').addEventListener('change',handleZipImport);
+document.getElementById('bas-xlsx-input').addEventListener('change',handleBasXlsx);
+basList=basLoadLocal();
 initMapControls();
 renderDashboard();
 initFirebase();
-// Safety: never let the loading overlay hang more than 8s
-setTimeout(()=>{ if(typeof hideLoading==='function') hideLoading(); }, 8000);
+// If Firebase never even initializes (fully offline), don't hang forever.
+// When online, the records onSnapshot hides the spinner once data is on-device.
+setTimeout(()=>{ if(!firebaseReady && typeof hideLoading==='function'){ hideLoading(); showToast('Offline - showing local data'); } }, 15000);
 </script>
 </body>
 </html>
