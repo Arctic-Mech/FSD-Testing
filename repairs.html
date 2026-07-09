@@ -72,6 +72,8 @@
   td.editable:hover{outline:2px solid var(--navy-dim);outline-offset:-2px;}
   .spinner{width:48px;height:48px;border:5px solid var(--panel2);border-top-color:var(--navy);border-radius:50%;animation:spin 0.9s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
+  .pdf-chk{display:inline-flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:5px 9px;cursor:pointer;}
+  .pdf-chk input{width:auto;margin:0;}
   .toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
     padding:12px 20px;border-radius:8px;font-size:13px;z-index:500;opacity:0;transition:opacity 0.3s;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
   .toast.show{opacity:1;}
@@ -107,7 +109,7 @@
     </div>
     <div class="spacer"></div>
     <a class="back-link" id="back-link" href="index.html">&#8592; Main Site</a>
-    <span class="version-badge" id="version-badge">v1.8</span>
+    <span class="version-badge" id="version-badge">v1.9</span>
   </header>
   <nav class="tabs" id="tabs">
     <button class="active" data-view="dashboard" onclick="switchView('dashboard')">Dashboard</button>
@@ -261,8 +263,8 @@
           <input type="text" id="bas-search" placeholder="Search any name/alias" oninput="renderBas()">
           <select id="bas-filter" onchange="renderBas()">
             <option value="">BAS: All</option>
-            <option value="Y">Renamed (Y)</option>
-            <option value="N">Not yet (N / blank)</option>
+            <option value="Yes">Renamed (Yes)</option>
+            <option value="No">Not yet (No / unset)</option>
             <option value="N/A">N/A</option>
           </select>
           <select id="bas-type" onchange="renderBas()"><option value="">Type: All</option></select>
@@ -354,7 +356,7 @@
    Shares Firebase with the main site but only reads/writes
    records scoped to hospitalId + subFolder = "Repairs & Decommissions".
    ========================================================= */
-const APP_VERSION = 'v1.8';
+const APP_VERSION = 'v1.9';
 const REPAIR_BUILDING = 'Repairs & Decommissions';
 const CLEAR_LOG_PIN = '1977';
 const STORAGE_KEY = 'fsd_repairs_records_v1';
@@ -708,7 +710,7 @@ function renderLog(){
       }
       return `<td class="editable" data-ek="${key}" data-id="${r._id}">${escapeHtml(r[key]||'—')}</td>`;
     }).join('');
-    const actions=`<td><div class="actions-cell"><button class="btn btn-outline" data-action="map" data-id="${r._id}">Map</button><button class="btn btn-danger" data-action="del" data-id="${r._id}">Del</button></div></td>`;
+    const actions=`<td><div class="actions-cell"><button class="btn btn-outline" data-action="setloc" data-id="${r._id}">Set Location</button><button class="btn btn-danger" data-action="del" data-id="${r._id}">Del</button></div></td>`;
     return `<tr${isSub?' class="round-sub" style="display:none;"':''} data-base="${escapeHtml(normDamperId(baseDamperName(r.damperId)))}">${cells}${actions}</tr>`;
   };
 
@@ -755,6 +757,7 @@ function renderLog(){
       if(btn.dataset.action==='edit') editRecord(id), switchView('inspect');
       if(btn.dataset.action==='open' && r) openReport(r);
       if(btn.dataset.action==='map' && r) jumpToMap(r.damperId);
+      if(btn.dataset.action==='setloc' && r) startMapPlacement(id);
       if(btn.dataset.action==='del') delRecord(id);
       return;
     }
@@ -768,14 +771,8 @@ function delRecord(id){
 }
 
 /* ---- Report ---- */
-function openReport(r){
-  const w=window.open('','_blank');
-  const f=(l,v)=>`<div class="f"><span class="fl">${l}:</span><span class="fv">${escapeHtml(v||'\u2014')}</span></div>`;
-  const photosHtml=(r.photos&&r.photos.length)
-    ? r.photos.map(p=>`<img src="${p}" class="ph">`).join('')
-    : '<div class="ph-empty"></div><div class="ph-empty"></div>';
-  w.document.write(`<html><head><title>${escapeHtml(r.damperId)}</title>
-    <style>
+function reportStyles(){
+  return `
       body{font-family:Arial,Helvetica,sans-serif;padding:24px;max-width:860px;margin:0 auto;color:#1a1a1a;font-size:13px;}
       h1{color:#1a237e;text-align:center;margin:0 0 2px;font-size:26px;letter-spacing:1px;}
       .sub{text-align:center;font-weight:700;margin-bottom:18px;}
@@ -792,8 +789,16 @@ function openReport(r){
       .notes{margin-top:18px;}
       .notes .fl{margin-bottom:4px;}
       .notes-box{border:1px solid #333;min-height:110px;padding:8px;white-space:pre-wrap;}
-      @media print{ body{padding:0;} }
-    </style></head><body>
+      .report-page{page-break-after:always;}
+      .report-page:last-child{page-break-after:auto;}
+      @media print{ body{padding:0;} }`;
+}
+function reportBody(r){
+  const f=(l,v)=>`<div class="f"><span class="fl">${l}:</span><span class="fv">${escapeHtml(v||'\u2014')}</span></div>`;
+  const photosHtml=(r.photos&&r.photos.length)
+    ? r.photos.map(p=>`<img src="${p}" class="ph">`).join('')
+    : '<div class="ph-empty"></div><div class="ph-empty"></div>';
+  return `<div class="report-page">
     <h1>ARCTIC</h1>
     <div class="sub">Fire Damper Inspection \u2014 Repairs &amp; Decommissions</div>
     <div class="cols">
@@ -831,7 +836,11 @@ function openReport(r){
       </div>
     </div>
     <div class="notes"><span class="fl">Notes:</span><div class="notes-box">${escapeHtml(r.notes||'')}</div></div>
-    </body></html>`);
+  </div>`;
+}
+function openReport(r){
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>${escapeHtml(r.damperId)}</title><style>${reportStyles()}</style></head><body>${reportBody(r)}</body></html>`);
   w.document.close();
 }
 
@@ -996,16 +1005,109 @@ const EXPORT_COLS=[['Damper Name','damperId'],['Complete','__complete'],['Date',
   ['Test','testResult'],['Repair Made','repairMade'],['Cochran Scope','cochranScope'],['Fire Alarm','fireAlarm'],
   ['Climatech Scope','climatechScope'],['Size Matches Schedule','sizeMatchesSchedule'],['Notes','notes']];
 function buildRows(){ return scopedRecords().map(r=>{ const o={}; EXPORT_COLS.forEach(([h,k])=>{ o[h]= k==='__complete'?(isComplete(r)?'Yes':'No'):(r[k]||''); }); return o; }); }
+/* =========================================================
+   EXPORT REPORT PDFs — pick filters, then combined or individual
+   ========================================================= */
+function openPdfExportPicker(){
+  const scoped=scopedRecords();
+  // Distinct filter values available
+  const repairVals=[...new Set(scoped.map(r=>r.repairMade).filter(Boolean))].sort();
+  const typeVals=[...new Set(scoped.map(r=>r.damperType).filter(Boolean))].sort();
+  const floorVals=[...new Set(scoped.map(r=>r.floor).filter(Boolean))].sort();
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.innerHTML=`<div class="box" style="max-width:460px;width:100%;max-height:88vh;overflow:auto;">
+    <h2 style="margin:0 0 4px;">Export Report PDFs</h2>
+    <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Pick which forms to include (leave a group unchecked to include all of it). All filters that apply are combined.</p>
+
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px;">Status</div>
+    <div class="pdf-grp" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      <label class="pdf-chk"><input type="checkbox" data-g="status" value="complete"> Complete</label>
+      <label class="pdf-chk"><input type="checkbox" data-g="status" value="incomplete"> Incomplete</label>
+    </div>
+
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px;">Repair Made</div>
+    <div class="pdf-grp" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      ${repairVals.map(v=>`<label class="pdf-chk"><input type="checkbox" data-g="repair" value="${escapeHtml(v)}"> ${escapeHtml(v)}</label>`).join('')||'<span style="font-size:12px;color:#999;">none</span>'}
+    </div>
+
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px;">Damper Type</div>
+    <div class="pdf-grp" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      ${typeVals.map(v=>`<label class="pdf-chk"><input type="checkbox" data-g="type" value="${escapeHtml(v)}"> ${escapeHtml(v)}</label>`).join('')||'<span style="font-size:12px;color:#999;">none</span>'}
+    </div>
+
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px;">Floor</div>
+    <div class="pdf-grp" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      ${floorVals.map(v=>`<label class="pdf-chk"><input type="checkbox" data-g="floor" value="${escapeHtml(v)}"> ${escapeHtml(v)}</label>`).join('')||'<span style="font-size:12px;color:#999;">none</span>'}
+    </div>
+
+    <label class="pdf-chk" style="margin-bottom:14px;"><input type="checkbox" id="pdf-onmap-off"> Only dampers NOT on the map</label>
+
+    <div id="pdf-match-count" style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px;"></div>
+
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px;">Output</div>
+    <div class="btn-row" style="flex-direction:column;">
+      <button class="btn btn-primary" id="pdf-combined">Export all as ONE PDF</button>
+      <button class="btn btn-outline" id="pdf-individual">Export individually (one per damper)</button>
+      <button class="btn btn-outline" id="pdf-cancel" style="margin-top:6px;">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+
+  const mapLabelSet = (mapData && mapData.pages) ? new Set([].concat(...mapData.pages.map(p=>p.labels.map(l=>normDamperId(l.t))))) : null;
+  const getSel=g=>[...ov.querySelectorAll(`input[data-g="${g}"]:checked`)].map(c=>c.value);
+  function matched(){
+    const st=getSel('status'), rp=getSel('repair'), ty=getSel('type'), fl=getSel('floor');
+    const offOnly=ov.querySelector('#pdf-onmap-off').checked;
+    return scoped.filter(r=>{
+      if(st.length){ const s=isComplete(r)?'complete':'incomplete'; if(!st.includes(s)) return false; }
+      if(rp.length && !rp.includes(r.repairMade)) return false;
+      if(ty.length && !ty.includes(r.damperType)) return false;
+      if(fl.length && !fl.includes(r.floor)) return false;
+      if(offOnly){ const on=mapLabelSet?mapLabelSet.has(normDamperId(baseDamperName(r.damperId))):false; if(on) return false; }
+      return true;
+    });
+  }
+  function refresh(){ const n=matched().length; ov.querySelector('#pdf-match-count').textContent=`${n} form${n===1?'':'s'} match`; }
+  ov.addEventListener('change',refresh); refresh();
+
+  ov.querySelector('#pdf-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#pdf-combined').onclick=()=>{ const recs=matched(); if(!recs.length){ showToast('No forms match'); return; } ov.remove(); exportPdfsCombined(recs); };
+  ov.querySelector('#pdf-individual').onclick=()=>{ const recs=matched(); if(!recs.length){ showToast('No forms match'); return; } ov.remove(); exportPdfsIndividual(recs); };
+}
+function exportPdfsCombined(recs){
+  const w=window.open('','_blank');
+  if(!w){ showToast('Allow pop-ups to export PDFs'); return; }
+  const body=recs.map(r=>reportBody(r)).join('');
+  w.document.write(`<html><head><title>Repairs Reports (${recs.length})</title><style>${reportStyles()}</style></head><body>${body}
+    <script>window.onload=function(){setTimeout(function(){window.print();},400);}<\/script></body></html>`);
+  w.document.close();
+  showToast(`Opening ${recs.length} reports — use "Save as PDF"`);
+}
+function exportPdfsIndividual(recs){
+  if(recs.length>12 && !confirm(`This will open ${recs.length} print dialogs, one per damper. Continue?\n\n(Tip: "Export all as ONE PDF" is easier for large batches.)`)) return;
+  let i=0;
+  const doOne=()=>{
+    if(i>=recs.length) return;
+    const r=recs[i++];
+    const w=window.open('','_blank');
+    if(!w){ showToast('Allow pop-ups to export PDFs'); return; }
+    w.document.write(`<html><head><title>${escapeHtml(r.damperId)}</title><style>${reportStyles()}</style></head><body>${reportBody(r)}
+      <script>window.onload=function(){setTimeout(function(){window.print();},400);}<\/script></body></html>`);
+    w.document.close();
+    setTimeout(doOne, 800); // stagger so browsers don't block the burst
+  };
+  doOne();
+  showToast(`Opening ${recs.length} individual reports`);
+}
 function promptExportFormat(){
   if(!scopedRecords().length){ showToast('No forms to export'); return; }
   const ov=document.createElement('div'); ov.className='overlay';
-  ov.innerHTML=`<div class="box" style="text-align:center;"><h2>Export Log</h2><p style="font-size:13px;color:var(--text-dim);margin-bottom:14px;">Choose a format.</p>
-    <div class="btn-row" style="flex-direction:column;"><button class="btn" data-f="xlsx">Excel (.xlsx)</button><button class="btn btn-outline" data-f="csv">CSV (.csv)</button><button class="btn btn-outline" data-f="cancel" style="margin-top:6px;">Cancel</button></div></div>`;
+  ov.innerHTML=`<div class="box" style="text-align:center;"><h2>Export Log</h2><p style="font-size:13px;color:var(--text-dim);margin-bottom:14px;">What would you like to export?</p>
+    <div class="btn-row" style="flex-direction:column;"><button class="btn" data-f="xlsx">Spreadsheet — Excel (.xlsx)</button><button class="btn btn-outline" data-f="csv">Spreadsheet — CSV (.csv)</button><button class="btn" data-f="pdf" style="background:var(--red);color:#fff;border-color:var(--red);">Report PDFs</button><button class="btn btn-outline" data-f="cancel" style="margin-top:6px;">Cancel</button></div></div>`;
   document.body.appendChild(ov);
-  ov.addEventListener('click',e=>{ const b=e.target.closest('[data-f]'); if(!b) return; const f=b.dataset.f; ov.remove(); if(f==='xlsx') expXlsx(); else if(f==='csv') expCsv(); });
+  ov.addEventListener('click',e=>{ const b=e.target.closest('[data-f]'); if(!b) return; const f=b.dataset.f; ov.remove(); if(f==='xlsx') expXlsx(); else if(f==='csv') expCsv(); else if(f==='pdf') openPdfExportPicker(); });
 }
-function expXlsx(){ const ws=XLSX.utils.json_to_sheet(buildRows()); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Repairs'); XLSX.writeFile(wb,'Repairs_Decommissions_Log.xlsx'); }
-function expCsv(){ const rows=buildRows(); if(!rows.length) return; const cols=Object.keys(rows[0]); const csv=[cols.join(',')].concat(rows.map(r=>cols.map(c=>{ let v=String(r[c]==null?'':r[c]); if(/[",\n]/.test(v)) v='"'+v.replace(/"/g,'""')+'"'; return v; }).join(','))).join('\n'); const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='Repairs_Decommissions_Log.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+function expXlsx(){ const ws=XLSX.utils.json_to_sheet(buildRows()); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Repairs'); XLSX.writeFile(wb,'Repairs_Decommissions_Log.xlsx'); }function expCsv(){ const rows=buildRows(); if(!rows.length) return; const cols=Object.keys(rows[0]); const csv=[cols.join(',')].concat(rows.map(r=>cols.map(c=>{ let v=String(r[c]==null?'':r[c]); if(/[",\n]/.test(v)) v='"'+v.replace(/"/g,'""')+'"'; return v; }).join(','))).join('\n'); const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='Repairs_Decommissions_Log.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
 
 /* =========================================================
    CLEAR LOG (PIN 1977 + confirm)
@@ -1472,8 +1574,12 @@ function cancelPlacement(){
 }
 async function finalizePlacement(xFrac, yFrac){
   if(!placementMode) return;
+  const norm=normDamperId(placementMode.damperName);
+  // Remove any existing placement for this damper (on any page) so "Set Location"
+  // moves it rather than duplicating.
+  mapData.pages.forEach(p=>{ p.labels=p.labels.filter(l=>normDamperId(l.t)!==norm); });
   const pageObj=mapData.pages[mapCurrentPage];
-  pageObj.labels.push({ t: normDamperId(placementMode.damperName), x:+xFrac.toFixed(4), y:+yFrac.toFixed(4) });
+  pageObj.labels.push({ t: norm, x:+xFrac.toFixed(4), y:+yFrac.toFixed(4) });
   if(firebaseReady){
     try{
       await db.collection('maps').doc(mapKey()).set({
@@ -1488,7 +1594,7 @@ async function finalizePlacement(xFrac, yFrac){
   cancelPlacement();
   drawMapPage();
   renderLog();
-  showToast(`${name} placed on the map ✓`);
+  showToast(`${name} location set ✓`);
 }
 
 function initMapControls(){
@@ -1597,10 +1703,16 @@ function basStartListener(){
 }
 function basStatusNorm(v){
   const s=(v||'').trim().toUpperCase();
-  if(s==='Y'||s==='YES') return 'Y';
+  if(s==='Y'||s==='YES') return 'Yes';
   if(s==='N/A'||s==='NA') return 'N/A';
-  if(s==='N'||s==='NO') return 'N';
-  return ''; // blank = not yet done
+  if(s==='N'||s==='NO') return 'No';
+  return ''; // unset
+}
+// Auto-rule: any type other than E is N/A (not on the BAS system)
+function basEffectiveStatus(e){
+  const t=String(e.type||'').trim().toUpperCase();
+  if(t && t!=='E') return 'N/A';
+  return basStatusNorm(e.bas);
 }
 function clearBasFilters(){
   ['bas-search','bas-filter','bas-type','bas-area','bas-lvl'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
@@ -1627,8 +1739,8 @@ function renderBas(){
   if(q) rows=rows.filter(({e})=>[e.alias,e.oldName,e.newName,e.lvl,e.area,e.type].some(v=>String(v||'').toLowerCase().includes(q)));
   if(bf){
     rows=rows.filter(({e})=>{
-      const st=basStatusNorm(e.bas);
-      if(bf==='N') return st===''||st==='N';
+      const st=basEffectiveStatus(e);
+      if(bf==='No') return st===''||st==='No';
       return st===bf;
     });
   }
@@ -1642,12 +1754,16 @@ function renderBas(){
   body.innerHTML=rows.map(({e,i})=>{
     const cells=BAS_COLS.map(([h,key])=>{
       if(key==='bas'){
-        const st=basStatusNorm(e.bas);
-        return `<td><select class="bas-status" data-i="${i}" style="padding:5px 6px;border:1px solid var(--line);border-radius:5px;font-size:12px;font-weight:700;${st==='Y'?'color:var(--green);':st==='N/A'?'color:#555;':'color:var(--red);'}">
-          <option value="" ${st===''?'selected':''}>Not yet</option>
-          <option value="Y" ${st==='Y'?'selected':''}>Y</option>
-          <option value="N" ${st==='N'?'selected':''}>N</option>
-          <option value="N/A" ${st==='N/A'?'selected':''}>N/A</option>
+        const eff=basEffectiveStatus(e);
+        const auto=(String(e.type||'').trim().toUpperCase()!=='E' && String(e.type||'').trim()!=='');
+        if(auto){
+          return `<td title="Auto N/A (type ${escapeHtml(String(e.type))} is not on BAS)"><span class="badge" style="background:#e5e7eb;color:#555;">N/A (auto)</span></td>`;
+        }
+        return `<td><select class="bas-status" data-i="${i}" style="padding:5px 6px;border:1px solid var(--line);border-radius:5px;font-size:12px;font-weight:700;${eff==='Yes'?'color:var(--green);':eff==='N/A'?'color:#555;':eff==='No'?'color:var(--red);':''}">
+          <option value="" ${eff===''?'selected':''}>—</option>
+          <option value="Yes" ${eff==='Yes'?'selected':''}>Yes</option>
+          <option value="No" ${eff==='No'?'selected':''}>No</option>
+          <option value="N/A" ${eff==='N/A'?'selected':''}>N/A</option>
         </select></td>`;
       }
       return `<td class="bas-edit" data-i="${i}" data-k="${key}" style="cursor:pointer;">${escapeHtml(String(e[key]||'')||'—')}</td>`;
@@ -1808,20 +1924,114 @@ function renderSchedule(){
   empty.style.display='none';
   body.innerHTML=rows.map(({s,i})=>{
     const done=schIsDone(s);
-    const doneCell=`<td class="sticky-col" style="${done?'background:var(--panel2);':''}"><button class="btn ${done?'btn-outline':'btn-primary'} btn-xs sch-done" data-i="${i}">${done?'↺ Undo':'✓ Done'}</button></td>`;
+    const doneCell=`<td class="sticky-col" style="${done?'background:var(--panel2);':''}"><button class="btn ${done?'btn-primary':'btn-outline'} btn-xs sch-done" data-i="${i}">${done?'✓ Done':'No'}</button></td>`;
+    const pairBadge = s.pairId ? ` <span class="badge" style="background:var(--navy);color:#fff;font-size:9px;" title="Paired — moves together">🔗</span>` : '';
     const cells=SCH_COLS.map(([h,key])=>{
       let val=s[key]||'';
-      return `<td class="sch-edit" data-i="${i}" data-k="${key}" style="cursor:pointer;${done?'text-decoration:line-through;color:#999;':''}">${escapeHtml(String(val)||'—')}</td>`;
+      let extra = (key==='name') ? pairBadge : '';
+      return `<td class="sch-edit" data-i="${i}" data-k="${key}" style="cursor:pointer;${done?'text-decoration:line-through;color:#999;':''}">${escapeHtml(String(val)||'—')}${extra}</td>`;
     }).join('');
-    return `<tr${done?' style="opacity:0.65;"':''}>${doneCell}${cells}<td><button class="btn btn-danger btn-xs" data-del="${i}">Del</button></td></tr>`;
+    return `<tr${done?' style="opacity:0.65;"':''}>${doneCell}${cells}<td><div class="actions-cell"><button class="btn btn-outline btn-xs" data-pair="${i}">${s.pairId?'Unpair':'Pair'}</button><button class="btn btn-danger btn-xs" data-del="${i}">Del</button></div></td></tr>`;
   }).join('');
   body.onclick=function(ev){
     const dn=ev.target.closest('.sch-done');
     if(dn){ const i=+dn.dataset.i; schedule[i].done=schIsDone(schedule[i])?'':'x'; schSaveCloud(); renderSchedule(); return; }
+    const pr=ev.target.closest('[data-pair]');
+    if(pr){ const i=+pr.dataset.pair; if(schedule[i].pairId){ unpairItem(i); } else { openPairPicker(i); } return; }
     const del=ev.target.closest('[data-del]');
     if(del){ const i=+del.dataset.del; if(confirm(`Delete "${schedule[i].name||'item'}"?`)){ schedule.splice(i,1); schSaveCloud(); renderSchedule(); } return; }
     const ec=ev.target.closest('.sch-edit');
     if(ec){ openSchCellEdit(+ec.dataset.i, ec.dataset.k); }
+  };
+}
+// Parse a schedule date string (M/D/YY or M/D/YYYY) to a Date at local midnight
+function schParseDate(s){
+  const m=/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec((s||'').trim());
+  if(!m) return null;
+  let y=parseInt(m[3]); if(y<100) y+=2000;
+  const d=new Date(y, parseInt(m[1])-1, parseInt(m[2]));
+  return isNaN(d)?null:d;
+}
+function schFmtDate(d){ return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2); }
+function schDateKey(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+// Count scheduled (non-done) items per day
+function schDayCounts(excludeIndex){
+  const counts={};
+  schedule.forEach((s,idx)=>{
+    if(idx===excludeIndex) return;
+    if(schIsDone(s)) return;
+    const d=schParseDate(s.date); if(!d) return;
+    const k=schDateKey(d); counts[k]=(counts[k]||0)+1;
+  });
+  return counts;
+}
+// Suggest good weekday dates: closest-first, prefer empty/light days, stop at end of job
+function schSuggestDates(excludeIndex){
+  const counts=schDayCounts(excludeIndex);
+  // Determine the job's date span from existing scheduled items
+  const dates=schedule.map(s=>schParseDate(s.date)).filter(Boolean).sort((a,b)=>a-b);
+  const start=new Date(); start.setHours(0,0,0,0);
+  // Walk forward day by day; track consecutive blank weekdays to detect job end
+  const suggestions=[];
+  let consecutiveBlank=0;
+  let cursor=new Date(start);
+  const HORIZON=180; // safety cap in days
+  for(let n=0;n<HORIZON;n++){
+    const dow=cursor.getDay();
+    const isWeekday=dow>=1 && dow<=5;
+    if(isWeekday){
+      const k=schDateKey(cursor);
+      const c=counts[k]||0;
+      if(c===0) consecutiveBlank++; else consecutiveBlank=0;
+      // Stop suggesting once we hit 7 blank weekdays in a row (end of job window)
+      if(consecutiveBlank>=7) break;
+      suggestions.push({ date:new Date(cursor), count:c });
+    }
+    cursor.setDate(cursor.getDate()+1);
+  }
+  // Sort: lightest days first, then closest. Keep only empty or light (<=2) days.
+  const light=suggestions.filter(s=>s.count<=2);
+  light.sort((a,b)=> a.count-b.count || a.date-b.date);
+  return light.slice(0,8);
+}
+function unpairItem(i){
+  const pid=schedule[i].pairId;
+  if(!pid) return;
+  const members=schedule.filter(s=>s.pairId===pid);
+  if(members.length<=2){
+    // Removing from a 2-item pair dissolves it
+    schedule.forEach(s=>{ if(s.pairId===pid) delete s.pairId; });
+  } else {
+    delete schedule[i].pairId;
+  }
+  schSaveCloud(); renderSchedule(); showToast('Unpaired');
+}
+function openPairPicker(i){
+  const base=schedule[i];
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  // candidates = other items not already in a different pair
+  const candidates=schedule.map((s,idx)=>({s,idx})).filter(({s,idx})=> idx!==i && !schIsDone(s) && (!s.pairId || s.pairId===base.pairId));
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:420px;width:100%;padding:20px;max-height:85vh;overflow:auto;">
+    <h2 style="margin:0 0 4px;font-size:16px;">Pair with "${escapeHtml(base.name||'')}"</h2>
+    <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Select items that must be done together. When one's date moves, they all move.</p>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${candidates.map(({s,idx})=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;border:1px solid var(--line);border-radius:6px;padding:8px;cursor:pointer;">
+        <input type="checkbox" value="${idx}" style="width:auto;"> <b>${escapeHtml(s.name||'—')}</b> <span style="color:var(--text-dim);">${escapeHtml(s.type||'')} · ${escapeHtml(s.date||'no date')}</span></label>`).join('')||'<div style="font-size:12px;color:var(--text-dim);">No available items to pair.</div>'}
+    </div>
+    <div class="btn-row" style="margin-top:14px;"><button class="btn btn-outline" id="pp-cancel">Cancel</button><button class="btn btn-primary" id="pp-save">Pair</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#pp-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#pp-save').onclick=()=>{
+    const picked=[...ov.querySelectorAll('input[type=checkbox]:checked')].map(c=>+c.value);
+    if(!picked.length){ showToast('Select at least one item'); return; }
+    const pid = base.pairId || ('pair_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6));
+    base.pairId=pid;
+    picked.forEach(idx=>{ schedule[idx].pairId=pid; });
+    // Align paired items to the base item's date (if it has one)
+    if(base.date){ schedule.forEach(s=>{ if(s.pairId===pid) s.date=base.date; }); }
+    schSaveCloud(); ov.remove(); renderSchedule();
+    showToast(`Paired ${picked.length+1} items`);
   };
 }
 function openSchCellEdit(i,key){
@@ -1830,16 +2040,41 @@ function openSchCellEdit(i,key){
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
   const isChoice=['arctic','cochran','neudorfer'].includes(key);
-  const inputHtml= isChoice
-    ? `<select id="sce-input" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;"><option value="">—</option><option ${s[key]==='Yes'?'selected':''}>Yes</option><option ${s[key]==='No'?'selected':''}>No</option></select>`
-    : `<input type="text" id="sce-input" value="${escapeHtml(String(s[key]||''))}" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">`;
-  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:360px;width:100%;padding:20px;">
+  let inputHtml;
+  if(key==='date'){
+    const sugg=schSuggestDates(i);
+    const chips=sugg.map(su=>{
+      const dow=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][su.date.getDay()];
+      const tag=su.count===0?'open':`${su.count} on day`;
+      const col=su.count===0?'var(--green)':'var(--gold)';
+      return `<button class="sug-date" data-d="${schFmtDate(su.date)}" style="text-align:left;border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:var(--panel);cursor:pointer;font-size:13px;display:flex;justify-content:space-between;gap:10px;"><span>${dow} ${schFmtDate(su.date)}</span><span style="color:${col};font-weight:700;">${tag}</span></button>`;
+    }).join('');
+    inputHtml=`<input type="text" id="sce-input" value="${escapeHtml(String(s[key]||''))}" placeholder="M/D/YY" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">
+      ${sugg.length?`<div style="font-size:11px;color:var(--text-dim);margin:12px 0 6px;">Suggested light/open work days (closest first):</div><div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;">${chips}</div>`:'<div style="font-size:12px;color:var(--text-dim);margin-top:10px;">No open weekdays found in the job window.</div>'}`;
+  } else if(isChoice){
+    inputHtml=`<select id="sce-input" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;"><option value="">—</option><option ${s[key]==='Yes'?'selected':''}>Yes</option><option ${s[key]==='No'?'selected':''}>No</option></select>`;
+  } else {
+    inputHtml=`<input type="text" id="sce-input" value="${escapeHtml(String(s[key]||''))}" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">`;
+  }
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:380px;width:100%;padding:20px;max-height:85vh;overflow:auto;">
     <h2 style="margin:0 0 12px;font-size:16px;">${escapeHtml(lbl)}</h2>${inputHtml}
     <div class="btn-row" style="margin-top:14px;"><button class="btn btn-outline" id="sce-cancel">Cancel</button><button class="btn" id="sce-save">Save</button></div></div>`;
   document.body.appendChild(ov);
   const inp=ov.querySelector('#sce-input'); if(inp.focus) inp.focus();
+  // Clicking a suggestion fills the input (and, if the item is part of a pair, moves the group)
+  ov.querySelectorAll('.sug-date').forEach(b=>b.addEventListener('click',()=>{ inp.value=b.dataset.d; }));
   ov.querySelector('#sce-cancel').onclick=()=>ov.remove();
-  ov.querySelector('#sce-save').onclick=()=>{ s[key]=(inp.value||'').trim(); schSaveCloud(); ov.remove(); renderSchedule(); showToast('Updated'); };
+  ov.querySelector('#sce-save').onclick=()=>{
+    const newVal=(inp.value||'').trim();
+    if(key==='date' && s.pairId){
+      // Move all items in the same pair to the new date
+      schedule.forEach(it=>{ if(it.pairId===s.pairId) it.date=newVal; });
+    } else {
+      s[key]=newVal;
+    }
+    schSaveCloud(); ov.remove(); renderSchedule();
+    showToast(key==='date'&&s.pairId?'Paired items moved':'Updated');
+  };
 }
 function openSchAdd(){
   const ov=document.createElement('div');
