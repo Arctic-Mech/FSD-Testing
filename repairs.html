@@ -1,0 +1,2605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Arctic — Repairs & Decommissions</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{--bg:#f4f6fb;--panel:#fff;--panel2:#eef1f8;--navy:#1a237e;--gold:#b48c28;--red:#c0392b;
+    --green:#2e7d32;--line:#d8deea;--text:#1a1f2e;--text-dim:#6b7280;--mono:'SF Mono',Menlo,monospace;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);
+    color:var(--text);-webkit-font-smoothing:antialiased;padding-bottom:40px;}
+  .app{max-width:1400px;margin:0 auto;}
+  header.top{position:sticky;top:0;z-index:50;background:#fff;color:var(--navy);padding:10px 16px;
+    display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,0.12);border-bottom:1px solid var(--line);}
+  header.top .logo{font-weight:800;font-size:18px;letter-spacing:1px;}
+  header.top .header-logo-img{height:30px;width:auto;display:block;}
+  header.top .header-divider{width:1px;height:26px;background:var(--line);}
+  header.top .sub{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;}
+  header.top .spacer{flex:1;}
+  header.top .back-link{color:var(--navy);}
+  .version-badge{font-size:10px;background:var(--panel2);color:var(--text-dim);border:1px solid var(--line);padding:3px 8px;border-radius:10px;}
+  nav.tabs{display:flex;gap:2px;background:var(--panel2);padding:4px;position:sticky;top:52px;z-index:40;}
+  nav.tabs button{flex:1;padding:12px;border:none;background:transparent;font-weight:600;font-size:13px;
+    color:var(--text-dim);cursor:pointer;border-radius:6px;}
+  nav.tabs button.active{background:var(--navy);color:#fff;}
+  main{padding:16px;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .card{background:var(--panel);border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:14px;}
+  h1{font-size:20px;margin-bottom:12px;}
+  h2{font-size:16px;margin-bottom:10px;}
+  label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:4px;font-weight:600;}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;
+    font-size:14px;font-family:inherit;background:#fff;margin-bottom:10px;}
+  .btn{padding:11px 16px;border:none;border-radius:7px;font-weight:600;font-size:13px;cursor:pointer;
+    background:var(--navy);color:#fff;}
+  .btn-outline{background:#fff;color:var(--navy);border:1px solid var(--navy);}
+  .btn-danger{background:var(--red);color:#fff;}
+  .btn-gold{background:var(--gold);color:#fff;}
+  .btn-xs{padding:4px 8px;font-size:10px;}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;}
+  .stat{background:var(--panel);border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer;}
+  .stat .num{font-size:28px;font-weight:800;color:var(--navy);}
+  .stat .lbl{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-top:4px;}
+  .stat.fail .num{color:var(--red);}
+  .stat.decom .num{color:var(--gold);}
+  .stat.done .num{color:var(--green);}
+  .progress-wrap{background:var(--panel);border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:14px;}
+  .progress-bar{height:12px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:8px 0;}
+  .progress-fill{height:100%;background:var(--green);transition:width 0.3s;}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .filters input,.filters select{width:auto;flex:1;min-width:120px;margin-bottom:0;}
+  .log-table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:8px;max-height:70vh;}
+  table.log-table{border-collapse:separate;border-spacing:0;width:100%;font-size:12px;white-space:nowrap;}
+  table.log-table th{background:var(--panel2);color:var(--navy);text-transform:uppercase;letter-spacing:0.5px;
+    font-size:10px;font-weight:700;padding:10px;text-align:left;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2;}
+  table.log-table td{padding:10px;border-bottom:1px solid var(--line);color:var(--text);background:var(--panel);}
+  table.log-table tbody tr:hover td{background:var(--panel2);}
+  table.log-table .sticky-col{position:sticky;left:0;z-index:3;box-shadow:2px 0 4px rgba(0,0,0,0.08);}
+  table.log-table th.sticky-col{z-index:4;background:var(--panel2);}
+  table.log-table .actions-cell{display:flex;gap:6px;}
+  table.log-table .actions-cell button{padding:6px 10px;font-size:11px;width:auto;}
+  .badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;}
+  .badge.pass{background:rgba(46,125,50,0.15);color:var(--green);}
+  .badge.fail{background:rgba(192,57,43,0.15);color:var(--red);}
+  .badge.decom{background:rgba(180,140,40,0.15);color:var(--gold);}
+  .empty{text-align:center;color:var(--text-dim);padding:40px 20px;font-size:13px;}
+  .did-link{color:var(--navy);text-decoration:underline;cursor:pointer;font-weight:700;}
+  td.editable{cursor:pointer;}
+  td.editable:hover{outline:2px solid var(--navy-dim);outline-offset:-2px;}
+  .spinner{width:48px;height:48px;border:5px solid var(--panel2);border-top-color:var(--navy);border-radius:50%;animation:spin 0.9s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .pdf-chk{display:inline-flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:5px 9px;cursor:pointer;}
+  .pdf-chk input{width:auto;margin:0;}
+  .map-tag-marker:hover{background:rgba(26,35,126,0.18)!important;box-shadow:0 0 0 2px rgba(26,35,126,0.35);}
+  .tag-menu-btn:hover{background:var(--panel2);}
+  .toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
+    padding:12px 20px;border-radius:8px;font-size:13px;z-index:500;opacity:0;transition:opacity 0.3s;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
+  .toast.show{opacity:1;}
+  .overlay{position:fixed;inset:0;z-index:600;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;}
+  .overlay .box{background:var(--panel);border-radius:12px;max-width:440px;width:100%;padding:22px;max-height:90vh;overflow-y:auto;}
+  .back-link{color:#fff;text-decoration:none;font-size:13px;opacity:0.85;display:flex;align-items:center;gap:4px;}
+  .wizard-progress{display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;}
+  .step-question{font-size:17px;font-weight:700;margin-bottom:14px;}
+  .opt-btn{display:flex;justify-content:space-between;align-items:center;padding:14px;border:1px solid var(--line);
+    border-radius:8px;background:#fff;font-size:15px;cursor:pointer;width:100%;text-align:left;}
+  .opt-btn.selected{border-color:var(--navy);background:var(--panel2);}
+  .opt-btn .chk{color:var(--navy);font-weight:700;}
+  .pin-overlay{position:fixed;inset:0;z-index:700;background:rgba(10,14,40,0.95);display:none;align-items:center;justify-content:center;}
+  .pin-box{background:var(--panel);border-radius:14px;padding:24px;width:300px;text-align:center;}
+  .pin-dots{display:flex;gap:12px;justify-content:center;margin:16px 0;}
+  .pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--navy);}
+  .pin-dot.filled{background:var(--navy);}
+  .pin-keys{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .pin-keys button{padding:16px;font-size:18px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;}
+  footer.sig{text-align:center;font-family:var(--mono);font-size:10px;color:var(--text-dim);padding:16px;}
+</style>
+</head>
+<body>
+<div id="loading-overlay" style="position:fixed;inset:0;z-index:900;background:rgba(244,245,251,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.3s;">
+  <div class="spinner"></div>
+  <div style="margin-top:16px;color:var(--navy);font-weight:700;font-size:14px;">Loading from cloud…</div>
+</div>
+<div class="app">
+  <header class="top">
+    <img class="header-logo-img" id="header-logo-img" alt="ARCTIC">
+    <div class="header-divider"></div>
+    <div>
+      <div class="sub">Fire Damper Inspection</div>
+      <div class="sub" style="opacity:0.7;">Repairs &amp; Decommissions</div>
+    </div>
+    <div class="spacer"></div>
+    <a class="back-link" id="back-link" href="index.html">&#8592; Main Site</a>
+    <span class="version-badge" id="version-badge">v2.4</span>
+  </header>
+  <nav class="tabs" id="tabs">
+    <button class="active" data-view="dashboard" onclick="switchView('dashboard')">Dashboard</button>
+    <button data-view="inspect" onclick="switchView('inspect')">New Form</button>
+    <button data-view="log" onclick="switchView('log')">Project Log</button>
+    <button data-view="map" onclick="switchView('map')">Map</button>
+    <button data-view="bas" onclick="switchView('bas')">BAS</button>
+    <button data-view="schedule" onclick="switchView('schedule')">Schedule</button>
+  </nav>
+  <main>
+    <!-- DASHBOARD -->
+    <section class="view active" id="view-dashboard">
+      <h1 id="dash-title">Repairs &amp; Decommissions</h1>
+      <div class="stats-grid">
+        <div class="stat" data-filter="all"><div class="num" id="stat-total">0</div><div class="lbl">Total Forms</div></div>
+        <div class="stat done" data-filter="__complete__"><div class="num" id="stat-complete">0</div><div class="lbl">Complete</div></div>
+        <div class="stat fail" data-filter="__incomplete__"><div class="num" id="stat-incomplete">0</div><div class="lbl">Incomplete</div></div>
+        <div class="stat decom" data-filter="Decommissioned"><div class="num" id="stat-decom">0</div><div class="lbl">Decommissioned</div></div>
+        <div class="stat" data-filter="__repairs__"><div class="num" id="stat-repaired">0</div><div class="lbl">Repaired</div></div>
+        <div class="stat" data-filter="__replaced__"><div class="num" id="stat-replaced">0</div><div class="lbl">Replaced</div></div>
+      </div>
+      <div class="progress-wrap">
+        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;">
+          <span id="progress-pct">0% Complete</span>
+          <span id="progress-count">0 / 0</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      </div>
+      <div class="card">
+        <h2>Quick Actions</h2>
+        <div class="btn-row" data-arctic-only>
+          <button class="btn" onclick="switchView('inspect')">+ New Form</button>
+          <label class="btn btn-outline" style="cursor:pointer;">
+            &#128194; Import Forms (ZIP)
+            <input type="file" accept=".zip,application/zip" style="display:none;" id="import-zip-input">
+          </label>
+        </div>
+        <div class="btn-row" data-anyone style="margin-top:8px;">
+          <button class="btn btn-outline" onclick="promptExportFormat()">Export</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- INSPECT / NEW FORM -->
+    <section class="view" id="view-inspect">
+      <div class="card" id="inspect-card"></div>
+    </section>
+
+    <!-- LOG -->
+    <section class="view" id="view-log">
+      <div class="card">
+        <h2>Repairs &amp; Decommissions Log</h2>
+        <div class="filters">
+          <input type="text" id="f-damper" placeholder="Search Damper Name" oninput="renderLog()">
+          <input type="text" id="f-equip" placeholder="Search Equipment" oninput="renderLog()">
+          <select id="f-repair" onchange="renderLog()">
+            <option value="">Repair: All</option>
+            <option value="__repairs__">Repairs (Tabs/Motor/Access/Repaired)</option>
+            <option>Tabs</option><option>Motor</option><option>Access</option>
+            <option>Decommissioned</option>
+            <option value="__replaced__">Replaced (Replaced/Replacement)</option>
+            <option>Repaired</option><option>Replacement</option>
+          </select>
+        </div>
+        <div class="filters">
+          <select id="f-cochran" onchange="renderLog()">
+            <option value="">Cochran: All</option>
+            <option value="Complete">Complete</option><option value="Incomplete">Incomplete</option>
+            <option value="N/A">N/A</option><option value="__blank__">Blank</option>
+          </select>
+          <select id="f-climatech" onchange="renderLog()">
+            <option value="">Climatech: All</option>
+            <option value="Complete">Complete</option><option value="Incomplete">Incomplete</option>
+            <option value="N/A">N/A</option><option value="__blank__">Blank</option>
+          </select>
+          <select id="f-firealarm" onchange="renderLog()">
+            <option value="">Fire Alarm: All</option>
+            <option value="Complete">Complete</option><option value="Incomplete">Incomplete</option>
+            <option value="N/A">N/A</option><option value="__blank__">Blank</option>
+          </select>
+          <select id="f-status" onchange="renderLog()">
+            <option value="">Status: All</option>
+            <option value="__complete__">Complete</option>
+            <option value="__incomplete__">Incomplete</option>
+          </select>
+          <select id="f-dtype" onchange="renderLog()">
+            <option value="">Type: All</option>
+          </select>
+          <select id="f-map" onchange="renderLog()">
+            <option value="">Map: All</option>
+            <option value="__on__">On map</option>
+            <option value="__off__">Not on map</option>
+          </select>
+        </div>
+        <div class="filters" style="margin-bottom:0;">
+          <button class="btn btn-outline btn-sm" onclick="clearFilters()" style="margin:0;">Clear Filters</button>
+          <button class="btn btn-outline btn-sm" onclick="restoreCols()" style="margin:0;">Show All Columns</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-outline" onclick="promptExportFormat()">Export Log</button>
+          <button class="btn btn-outline" onclick="openLogSettings()" data-arctic-only>⚙ Settings</button>
+        </div>
+        <div id="log-count" style="font-size:12px;font-weight:700;color:var(--navy);margin-top:10px;"></div>
+        <div id="hidden-cols" style="margin-top:6px;"></div>
+      </div>
+      <div class="log-table-wrap">
+        <table class="log-table" id="log-table">
+          <thead><tr id="log-table-head"></tr></thead>
+          <tbody id="log-table-body"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="log-empty" style="display:none;"></div>
+    </section>
+
+    <!-- MAP -->
+    <section class="view" id="view-map">
+      <div class="card" id="map-no-file" style="display:none;text-align:center;">
+        <h2>Damper Map</h2>
+        <p style="font-size:13px;color:var(--text-dim);">No drawing loaded for this job yet. Upload a PDF map to enable map view and damper links.</p>
+        <label class="btn" style="cursor:pointer;display:inline-block;width:auto;padding:12px 24px;">
+          &#128206; Upload PDF Map
+          <input type="file" accept="application/pdf" style="display:none;" id="map-empty-upload-input">
+        </label>
+      </div>
+      <div id="map-content" style="display:none;">
+        <div class="card" style="padding:10px;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select id="map-page-select" style="margin:0;width:auto;flex:1;min-width:120px;padding:8px;border:1px solid var(--line);border-radius:6px;"></select>
+            <button class="btn btn-outline" style="width:auto;margin:0;padding:8px 12px;font-size:12px;" id="map-zoom-out">&#8722;</button>
+            <button class="btn btn-outline" style="width:auto;margin:0;padding:8px 12px;font-size:12px;" id="map-zoom-in">+</button>
+            <button class="btn btn-outline" style="width:auto;margin:0;padding:8px 12px;font-size:12px;" id="map-zoom-reset">Fit</button>
+            <label class="btn btn-outline" style="width:auto;margin:0;padding:8px 12px;font-size:12px;cursor:pointer;">
+              &#128206; Replace
+              <input type="file" accept="application/pdf" style="display:none;" id="map-replace-input">
+            </label>
+          </div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:8px;">
+            <span id="map-coverage-summary"></span>
+          </div>
+        </div>
+        <div id="map-viewport" style="position:relative;overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:8px;background:#fff;max-height:72vh;">
+          <div id="map-canvas-wrap" style="position:relative;transform-origin:0 0;">
+            <div id="map-markers" style="position:absolute;inset:0;pointer-events:none;z-index:4;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BAS -->
+    <section class="view" id="view-bas">
+      <div class="card">
+        <h2>BAS Name Changes</h2>
+        <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Dampers we renamed. "Renamed in BAS?" tracks whether the change was made on the BAS system. Tap that cell to toggle Y / N / N/A.</p>
+        <div class="filters">
+          <input type="text" id="bas-search" placeholder="Search any name/alias" oninput="renderBas()">
+          <select id="bas-filter" onchange="renderBas()">
+            <option value="">BAS: All</option>
+            <option value="Yes">Renamed (Yes)</option>
+            <option value="No">Not yet (No)</option>
+            <option value="N/A">N/A</option>
+          </select>
+          <select id="bas-type" onchange="renderBas()"><option value="">Type: All</option></select>
+          <select id="bas-area" onchange="renderBas()"><option value="">Area: All</option></select>
+          <select id="bas-lvl" onchange="renderBas()"><option value="">LVL: All</option></select>
+          <button class="btn btn-outline btn-sm" onclick="clearBasFilters()" style="margin:0;">Clear</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary btn-sm" onclick="openBasAdd()" data-bas-manage>+ Add Entry</button>
+          <label class="btn btn-outline btn-sm" style="cursor:pointer;" data-bas-manage>
+            &#128194; Import Excel
+            <input type="file" accept=".xlsx,.xls" style="display:none;" id="bas-xlsx-input">
+          </label>
+          <button class="btn btn-outline btn-sm" onclick="exportBas()">Export Excel</button>
+          <button class="btn btn-outline btn-sm" onclick="basRestoreCols()">Show All Columns</button>
+        </div>
+        <div id="bas-count" style="font-size:12px;font-weight:700;color:var(--navy);margin-top:10px;"></div>
+        <div id="bas-hidden-cols" style="margin-top:6px;"></div>
+      </div>
+      <div class="log-table-wrap">
+        <table class="log-table">
+          <thead><tr id="bas-head"></tr></thead>
+          <tbody id="bas-body"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="bas-empty" style="display:none;"></div>
+    </section>
+
+    <!-- SCHEDULE -->
+    <section class="view" id="view-schedule">
+      <div class="card">
+        <h2>Schedule</h2>
+        <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Upload the schedule Excel. Tap <b>Done</b> to cross an item off — it moves to the bottom. Tap any cell to edit. Everything syncs across devices.</p>
+        <div class="filters">
+          <input type="text" id="sch-search" placeholder="Search name / location / notes" oninput="renderSchedule()">
+          <select id="sch-floor" onchange="renderSchedule()"><option value="">Floor: All</option></select>
+          <select id="sch-type" onchange="renderSchedule()"><option value="">Type: All</option></select>
+          <select id="sch-done" onchange="renderSchedule()">
+            <option value="">Done: All</option>
+            <option value="__open__">Open only</option>
+            <option value="__done__">Done only</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="clearSchFilters()" style="margin:0;">Clear</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary btn-sm" onclick="openSchAdd()" data-sched-manage>+ Add Item</button>
+          <label class="btn btn-outline btn-sm" style="cursor:pointer;" data-sched-manage>
+            &#128194; Import Excel
+            <input type="file" accept=".xlsx,.xls" style="display:none;" id="sch-xlsx-input">
+          </label>
+          <button class="btn btn-outline btn-sm" onclick="exportSchedule()">Export Excel</button>
+          <button class="btn btn-outline btn-sm" onclick="openSchedule()">Open SharePoint &#8599;</button>
+          <button class="btn btn-outline btn-sm" onclick="schRestoreCols()">Show All Columns</button>
+        </div>
+        <div id="sch-count" style="font-size:12px;font-weight:700;color:var(--navy);margin-top:10px;"></div>
+        <div id="sch-hidden-cols" style="margin-top:6px;"></div>
+      </div>
+      <div class="log-table-wrap">
+        <table class="log-table">
+          <thead><tr id="sch-head"></tr></thead>
+          <tbody id="sch-body"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="sch-empty" style="display:none;"></div>
+    </section>
+  </main>
+  <footer class="sig" id="app-footer">ARCTIC Repairs &amp; Decommissions</footer>
+</div>
+
+<!-- PIN overlay -->
+<div class="pin-overlay" id="pin-overlay">
+  <div class="pin-box">
+    <h2 id="pin-title">Enter PIN</h2>
+    <p id="pin-desc" style="font-size:12px;color:var(--text-dim);">Enter PIN to continue</p>
+    <div class="pin-dots">
+      <div class="pin-dot" id="dot-0"></div><div class="pin-dot" id="dot-1"></div>
+      <div class="pin-dot" id="dot-2"></div><div class="pin-dot" id="dot-3"></div>
+    </div>
+    <div class="pin-keys">
+      <button onclick="pinKey('1')">1</button><button onclick="pinKey('2')">2</button><button onclick="pinKey('3')">3</button>
+      <button onclick="pinKey('4')">4</button><button onclick="pinKey('5')">5</button><button onclick="pinKey('6')">6</button>
+      <button onclick="pinKey('7')">7</button><button onclick="pinKey('8')">8</button><button onclick="pinKey('9')">9</button>
+      <button onclick="pinCancel()">✕</button><button onclick="pinKey('0')">0</button><button onclick="pinBackspace()">⌫</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   ARCTIC REPAIRS & DECOMMISSIONS — standalone app
+   Shares Firebase with the main site but only reads/writes
+   records scoped to hospitalId + subFolder = "Repairs & Decommissions".
+   ========================================================= */
+const ARCTIC_LOGO='data:image/png;base64,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liyZ7Xx8putaUorZrefi35fF+Bf1t0xOmKZBfki9kgBUCKbT1Msp73zWpFqVwqbJdV2DW9u3SCkBCAdgS1aeYjrRmMaIBrlvERihkhGNemtq2yxK1/WpU6cOGDDAMAwAcLxtIKpvy7LGjRv35ptvKt8VSrI3h1bGrhbZy87GJBtvSkQzKpqcSVXErKCHH3547Nixb775pp+fnyNkCJ/C5XK98847LVu2fOihh3y6RTOmOiFrxPZvzZo1a9as2YEDB1auXDl//vw//vjD7o2CM7BRNjFtMXsLbndIwY8jeUKnXfny5du3b9+zZ8/q1avjL2OdYJ6jVnaRspfnce5sTG+rjmxLHK4JbqdcBdRmGIkuU6bM6NGjhw4dunLlygULFqxbty4mJsb2LtuygIuAsf5sWBcZh0+j8xi/IjIysnXr1r169apfv76fnx/aYN4sGtuz50qXJ5eePBQHhKVdTAbIT6ExBgAeSG7QquKQF6txy8JT6bbEMiIE1zSalOiOijpledKsyxLAA5DrOJZJDJDpSckOECx0X7333ntjxozBbeS72/7f//730ksv5fvxt5lBUlISBmK8vM61a9eybWQnJCR4eQ/4WbfbDTk4wBXbSo0cOXL16tWrVq1y/PqtWrXatm1byZIlc6w7uT1LBJV45cqVK1eu/NJLLx05cmTp0qWLFy/+888/L126dEu5Scbkjzss/i0MGM8PW8z9/f3Lly/frl27Ro0a1alTJyAgwP5XPMjznGTZS3Ht2jVHtndaWlquesDU1FRHnis+Pj7XGp82eQoODu7cuXPnzp0TEhI2btwYFRW1cePG06dPo865xfkENzN9MyMLtycDMMbuv//+pk2bNmvWrH79+kWKFMGfo63lpSogP/705+GjiUGhhjAFAS0/ESyNUi655ZZPPPngg/eHmdzSCKFUu00yQQiPphkXzl3/9qcjggKVHKRGc6GjhVIz3VP30eLNmpUGL0rLcetcuHDhq6++QteoL45JbP1QtWrVzp07271zCiy1Ql9FdHT0zp07cS5QtlcVO3D27ds3e00uvvnmG2whm+2XTgjB6v0HHnggJ1vw43fFxMR8++23jnA79HngMqalpXXo0KF+/fo5P1TA5kDI7exvv379+p9//rl9+/bt27cfPXr06NGjycnJ2fuKgICA4sWLP/DAA1WqVKlVq1b16tXLlSuX8ejFsypPSyjy1J9//hmrFrK3PXAzcM67detWsWJFn7bwyNL2OHHixM6dO73R1fhcRYsWbdiwIeTuGCja/8h+bNk/cuTIvn37du3atWPHjsOHD99ue2TW78JY8eLF77nnnv/85z/16tWrXr16pUqVbCKFzl2nOqCSAjJrT0oJhABI8rd1kRIjigXo+M9JxaHG4OT1N6iQk68VjexbDBIhxPHjx69duxYTE3P27NlTp07FxMRcv34djwQMxNveKcMwQkJCQkNDIyIi7r333gceeKBkyZLFihULCwu73aWBR0v+2EtKKPLZKqEs3J4LeOHChcuXL1+6dOnkyZOxsbEnT56Mj4/HwDrmyCP3crlcLpcrICCgSJEiERERhQsXLl++fJkyZYoWLVq0aNHbZQE7NTp4//8H42ggLAVPdjEAAAAASUVORK5CYII=';
+const APP_VERSION = 'v2.4';
+
+/* =========================================================
+   COMPANY / PERMISSIONS
+   Chosen once on first launch, saved locally & permanent.
+   ========================================================= */
+const COMPANY_KEY='fsd_repairs_company_v1';
+const COMPANIES=['Arctic','Skanska','Cochran','Climatech','Fire Alarm Contractor','Kaiser'];
+let currentCompany=null;
+function loadCompany(){ try{ return localStorage.getItem(COMPANY_KEY)||null; }catch(e){ return null; } }
+function saveCompany(c){ try{ localStorage.setItem(COMPANY_KEY,c); }catch(e){} }
+
+// A "scope" tags each editable thing. can(scope) => is the current company allowed?
+//  Scopes: 'general' (all normal fields), 'cochran', 'firealarm', 'climatech',
+//          'basStatus', 'basNotes', 'schedDate', 'schedNotes'
+function can(scope){
+  switch(currentCompany){
+    case 'Arctic': return true; // full edit
+    case 'Skanska': return scope==='schedDate' || scope==='schedNotes';
+    case 'Cochran': return scope==='cochran' || scope==='firealarm';
+    case 'Climatech': return scope==='climatech' || scope==='basStatus' || scope==='basNotes';
+    case 'Fire Alarm Contractor': return scope==='firealarm';
+    case 'Kaiser': return false; // export only
+    default: return false;
+  }
+}
+// Convenience: can this company edit ANY normal record/general field?
+function canGeneral(){ return currentCompany==='Arctic'; }
+// Map a log/record field key to its permission scope
+function recordFieldScope(key){
+  if(key==='cochranScope') return 'cochran';
+  if(key==='fireAlarm') return 'firealarm';
+  if(key==='climatechScope') return 'climatech';
+  return 'general';
+}
+// Map a schedule field key to its scope
+function schedFieldScope(key){
+  if(key==='date'||key==='time') return 'schedDate';
+  if(key==='notes') return 'schedNotes';
+  if(key==='cochran') return 'cochran';
+  if(key==='neudorfer') return 'firealarm'; // Neudorfer = fire alarm contractor column
+  return 'general';
+}
+// Map a BAS field key to its scope
+function basFieldScope(key){
+  if(key==='bas') return 'basStatus';
+  if(key==='notes') return 'basNotes';
+  return 'general';
+}
+function permDenied(){ showToast('Your company doesn\u2019t have permission to edit this'); }
+
+// First-launch company picker (blocking until chosen)
+function promptCompany(){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:1000;background:rgba(10,14,40,0.96);display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.innerHTML=`<div style="background:var(--panel);border-radius:14px;max-width:420px;width:100%;padding:24px;text-align:center;">
+      <img src="${ARCTIC_LOGO}" style="height:40px;margin-bottom:8px;">
+      <h2 style="margin:0 0 4px;font-size:19px;color:var(--navy);">Welcome</h2>
+      <p style="font-size:13px;color:var(--text-dim);margin:0 0 18px;">Which company do you work for? This sets what you can edit and <b>can't be changed later</b>, so choose carefully.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${COMPANIES.map(c=>`<button class="btn btn-outline comp-pick" data-c="${escapeHtml(c)}" style="margin:0;text-align:left;font-size:15px;padding:12px 16px;">${escapeHtml(c)}</button>`).join('')}
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click',e=>{
+      const b=e.target.closest('.comp-pick'); if(!b) return;
+      const c=b.dataset.c;
+      if(!confirm(`Set your company to "${c}"? This is permanent on this device.`)) return;
+      saveCompany(c); currentCompany=c; ov.remove(); resolve(c);
+    });
+  });
+}
+function companyBadgeText(){ return currentCompany?`${currentCompany}`:''; }
+
+// Show/hide UI based on the signed-in company's permissions
+function applyCompanyUI(){
+  // Company badge in the header (next to version)
+  let badge=document.getElementById('company-badge');
+  if(!badge){
+    const vb=document.getElementById('version-badge');
+    if(vb && vb.parentNode){
+      badge=document.createElement('span');
+      badge.id='company-badge';
+      badge.style.cssText='display:inline-block;margin-right:8px;padding:2px 8px;border-radius:10px;background:var(--navy);color:#fff;font-size:11px;font-weight:700;';
+      vb.parentNode.insertBefore(badge, vb);
+    }
+  }
+  if(badge) badge.textContent=currentCompany||'';
+
+  const show=(el,on)=>{ if(el) el.style.display=on?'':'none'; };
+  // "New Form" tab: only Arctic creates forms
+  show(document.querySelector('#tabs button[data-view="inspect"]'), canGeneral());
+  // The log's ZIP-import label lives under the New Form flow — Arctic only
+  const zipLabel=document.getElementById('import-zip-input')?.closest('label');
+  show(zipLabel, canGeneral());
+  // Arctic-only, BAS-manage, schedule-manage groups
+  document.querySelectorAll('[data-arctic-only]').forEach(el=>show(el, canGeneral()));
+  document.querySelectorAll('[data-bas-manage]').forEach(el=>show(el, canGeneral()));
+  document.querySelectorAll('[data-sched-manage]').forEach(el=>show(el, canGeneral()));
+
+  // Re-render active view so inline controls reflect permissions
+  refreshActive();
+}
+
+const REPAIR_BUILDING = 'Repairs & Decommissions';
+const CLEAR_LOG_PIN = '1977';
+const STORAGE_KEY = 'fsd_repairs_records_v1';
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBm5Jlqt4AQdEuN4RNK17cBa_Y4NXiQJuk",
+  authDomain: "fsd-testing-4b475.firebaseapp.com",
+  projectId: "fsd-testing-4b475",
+  storageBucket: "fsd-testing-4b475.firebasestorage.app",
+  messagingSenderId: "791633172365",
+  appId: "1:791633172365:web:16a9d04b2d90222e8d4fc4"
+};
+
+let db = null, firebaseReady = false;
+let records = loadLocal();
+let currentHospitalName = decodeURIComponent((location.hash||'').replace(/^#/,'')) || 'kaiser-sunnyside';
+// Turn a slug like "kaiser-sunnyside" into "Kaiser Sunnyside" for display until resolved
+let currentHospitalDisplay = currentHospitalName.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+let currentHospitalId = null; // resolved from hospitals collection
+let wizard = null;
+
+if(typeof pdfjsLib !== 'undefined'){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+}
+
+/* ---- local cache ---- */
+function loadLocal(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY))||[]; }catch(e){ return []; } }
+function saveLocal(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); }catch(e){} }
+
+/* ---- helpers ---- */
+function slugify(s){ return String(s||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeJs(s){ return String(s==null?'':s).replace(/["'\\]/g,'\\$&').replace(/\n/g,'\\n'); }
+function normDamperId(s){ return String(s||'').toUpperCase().replace(/^FSD[-\s]?/, '').replace(/[^A-Z0-9]/g,''); }
+function isComplete(r){
+  if(r.statusOverride==='complete') return true;
+  if(r.statusOverride==='incomplete') return false;
+  return !!(r.repairMade && String(r.repairMade).trim()) && !!(r.photos && r.photos.length>0);
+}
+const REPAIR_GROUP=['Tabs','Motor','Access','Repaired']; // all count as "repairs"
+const REPLACED_GROUP=['Replaced','Replacement']; // both count as "replaced"
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._to); t._to=setTimeout(()=>t.classList.remove('show'),2600); }
+
+/* ---- Firebase ---- */
+async function initFirebase(){
+  try{
+    await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+    await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js');
+    if(typeof firebase==='undefined'){ showToast('Firebase failed to load'); return; }
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    firebaseReady = true;
+    // Resolve hospital id from the slug in the URL hash (main app sends slugify(name))
+    const snap = await db.collection('hospitals').get();
+    snap.forEach(d=>{
+      const data=d.data();
+      if(slugify(data.name)===currentHospitalName || data.name===currentHospitalName){
+        currentHospitalId = d.id;
+        currentHospitalDisplay = data.name; // use the real display name
+      }
+    });
+    // Load this job's map index now that the hospital is resolved, then
+    // refresh whichever view is showing (log flags depend on map labels)
+    loadMapData().then(()=>refreshActive()).catch(()=>{});
+    basStartListener();
+    schStartListener();
+    // Listen to records
+    db.collection('records').onSnapshot(s=>{
+      const all = s.docs.map(d=>({...d.data(), _id:d.id}));
+      records = all.filter(r=>r.subFolder===REPAIR_BUILDING);
+      saveLocal();
+      refreshActive();
+      hideLoading();
+    }, e=>{ console.error('records listener', e); hideLoading(); });
+    showToast('Cloud connected');
+  }catch(e){ console.error('Firebase init failed', e); showToast('Offline mode'); hideLoading(); }
+}
+function hideLoading(){ const el=document.getElementById('loading-overlay'); if(el){ el.style.opacity='0'; setTimeout(()=>el.remove(),300); } }
+function loadScript(src){ return new Promise((res,rej)=>{ if(document.querySelector(`script[src="${src}"]`)){res();return;} const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load '+src)); document.head.appendChild(s); }); }
+
+async function fbSave(rec){ if(!firebaseReady) return; try{ const {_id,...data}=rec; await db.collection('records').doc(_id).set(data); }catch(e){ console.error('fbSave',e); } }
+async function fbDelete(id){ if(!firebaseReady) return; try{ await db.collection('records').doc(id).delete(); }catch(e){ console.error('fbDelete',e); } }
+
+function scopedRecords(){ return records.filter(r=>r.subFolder===REPAIR_BUILDING && (!currentHospitalId || r.hospitalId===currentHospitalId)); }
+
+/* ---- View switching ---- */
+function switchView(v){
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  if(v!=='map'){ const bk=document.getElementById('map-back-log-btn'); if(bk) bk.remove(); }
+  if(v==='dashboard') renderDashboard();
+  if(v==='log') renderLog();
+  if(v==='inspect' && !wizard) renderIdEntry();
+  if(v==='map') renderMap();
+  if(v==='bas') renderBas();
+  if(v==='schedule') renderSchedule();
+}
+function refreshActive(){
+  const active = document.querySelector('.view.active');
+  if(!active) return;
+  if(active.id==='view-dashboard') renderDashboard();
+  if(active.id==='view-log') renderLog();
+  if(active.id==='view-map') renderMap();
+}
+
+/* =========================================================
+   FORM STEPS
+   ========================================================= */
+const STEPS = [
+  { key:'damperId',        label:'Damper Name / ID',   type:'text' },
+  { key:'dateTested',      label:'Date of Inspection', type:'date', optional:true },
+  { key:'damperAlias',     label:'Damper Alias',       type:'text', optional:true },
+  { key:'equipmentName',   label:'Equipment Name',     type:'text', optional:true },
+  { key:'roomName',        label:'Room Name',          type:'text', optional:true },
+  { key:'roomNumber',      label:'Room Number',        type:'text', optional:true },
+  { key:'floor',           label:'Floor',              type:'text', optional:true },
+  { key:'damperSize',      label:'Damper Size',        type:'text', optional:true },
+  { key:'damperType',      label:'Damper Type',        type:'select', options:['Fire Smoke Damper','Fire Damper','Smoke Damper'], optional:true },
+  { key:'installedIn',     label:'Installed In',       type:'select', options:['Supply','Return','Exhaust'], optional:true },
+  { key:'requiresShutdown',label:'Requires Shutdown?', type:'select', options:['Yes','No'], optional:true },
+  { key:'criticalArea',    label:'Critical Area?',     type:'select', options:['Yes','No'], optional:true },
+  { key:'testResult',      label:'Test',               type:'select', options:['Pass','Fail','Decommissioned',"Can't Test"], optional:true },
+  { key:'repairMade',      label:'Repair Made',        type:'select', options:['Tabs','Motor','Access','Decommissioned','Replaced','Replacement','Repaired'], optional:true },
+  { key:'cochranScope',    label:'Cochran Scope',      type:'select', options:['Complete','Incomplete','N/A'], optional:true },
+  { key:'fireAlarm',       label:'Fire Alarm',         type:'select', options:['Complete','Incomplete','N/A'], optional:true },
+  { key:'climatechScope',  label:'Climatech Scope',    type:'select', options:['Complete','Incomplete','N/A'], optional:true },
+  { key:'sizeMatchesSchedule', label:'If Decommissioned, Size Matches Schedule?', type:'select', options:['Yes','No','N/A'], optional:true },
+  { key:'notes',           label:'Notes',              type:'textarea', optional:true },
+];
+
+function renderIdEntry(){
+  const card = document.getElementById('inspect-card');
+  card.innerHTML = `<h2>New Repair / Decommission Form</h2>
+    <label>Damper Name / ID</label>
+    <input type="text" id="entry-damper-id" placeholder="Type damper name to begin..." autocomplete="off" style="font-size:18px;">`;
+  const btn = document.createElement('button');
+  btn.className='btn'; btn.textContent='Begin Form'; btn.style.marginTop='6px';
+  btn.addEventListener('click', beginWizard);
+  card.appendChild(btn);
+  const inp = document.getElementById('entry-damper-id');
+  inp.addEventListener('keydown',e=>{ if(e.key==='Enter') beginWizard(); });
+  inp.focus();
+}
+function beginWizard(){
+  if(!canGeneral()){ permDenied(); return; }
+  const inp = document.getElementById('entry-damper-id');
+  const id = inp ? inp.value.trim() : '';
+  if(!id){ showToast('Enter a damper name first'); if(inp){inp.style.borderColor='var(--red)'; setTimeout(()=>inp.style.borderColor='',2000);} return; }
+  const existing = scopedRecords().find(r=>normDamperId(r.damperId)===normDamperId(id));
+  if(existing){ editRecord(existing._id); return; }
+  wizard = { data:{ damperId:id, dateTested:todayStr(), hospitalId:currentHospitalId, subFolder:REPAIR_BUILDING }, step:1, editingId:null };
+  renderStep();
+}
+function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+function renderStep(){
+  const card=document.getElementById('inspect-card');
+  const step=STEPS[wizard.step];
+  if(!step){ renderReview(); return; }
+  card.innerHTML=`<div class="wizard-progress"><span>Step ${wizard.step+1} / ${STEPS.length}</span><span>${escapeHtml(wizard.data.damperId||'')}</span></div>
+    <div class="step-question">${step.label}</div><div id="step-body"></div>
+    <div class="btn-row" id="step-btns" style="margin-top:14px;"></div>`;
+  const body=document.getElementById('step-body');
+  const btns=document.getElementById('step-btns');
+  if(step.type==='select'){
+    (step.options||[]).forEach(opt=>{
+      const b=document.createElement('button');
+      const sel=wizard.data[step.key]===opt;
+      b.className='opt-btn'+(sel?' selected':'');
+      b.innerHTML=`<span>${opt}</span><span class="chk">${sel?'✓':''}</span>`;
+      b.style.marginBottom='8px';
+      b.addEventListener('click',()=>{ wizard.data[step.key]=opt; nextStep(); });
+      body.appendChild(b);
+    });
+  } else if(step.type==='textarea'){
+    const ta=document.createElement('textarea'); ta.id='step-input'; ta.rows=5; ta.value=wizard.data[step.key]||''; body.appendChild(ta); ta.focus();
+  } else if(step.type==='date'){
+    const inp=document.createElement('input'); inp.type='date'; inp.id='step-input'; inp.value=wizard.data[step.key]||todayStr(); body.appendChild(inp);
+  } else {
+    const inp=document.createElement('input'); inp.type='text'; inp.id='step-input'; inp.value=wizard.data[step.key]||''; inp.placeholder='Enter '+step.label.toLowerCase();
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') nextFromInput(); });
+    body.appendChild(inp); inp.focus();
+  }
+  btns.appendChild(mkBtn(wizard.step>0?'Back':'Cancel','btn-outline',wizard.step>0?prevStep:cancelWizard));
+  if(step.optional && step.type==='select') btns.appendChild(mkBtn('Skip','btn-outline',nextStep));
+  if(step.type!=='select') btns.appendChild(mkBtn(step.optional?'Next (or skip)':'Next','btn',nextFromInput));
+  // Let the user finish at any point — capture the current field first, then review
+  const finishBtn=mkBtn('✓ Complete Now','btn-gold',()=>{ captureCurrentStep(); renderReview(); });
+  finishBtn.style.marginLeft='auto';
+  btns.appendChild(finishBtn);
+}
+// Save whatever's typed/selected on the current step into wizard.data
+function captureCurrentStep(){
+  const step=STEPS[wizard.step]; if(!step) return;
+  const inp=document.getElementById('step-input');
+  if(inp){ const v=inp.value.trim(); if(v||step.optional) wizard.data[step.key]=v; }
+}
+function mkBtn(label,cls,fn){ const b=document.createElement('button'); b.className='btn '+(cls||''); b.textContent=label; b.addEventListener('click',fn); return b; }
+function nextFromInput(){ const step=STEPS[wizard.step]; const inp=document.getElementById('step-input'); if(inp){ const v=inp.value.trim(); if(v||step.optional) wizard.data[step.key]=v; } nextStep(); }
+function nextStep(){ wizard.step++; renderStep(); }
+function prevStep(){ if(wizard.step>0){ wizard.step--; renderStep(); } }
+function cancelWizard(){ wizard=null; switchView('dashboard'); }
+
+function renderReview(){
+  const card=document.getElementById('inspect-card');
+  const d=wizard.data;
+  let rows='';
+  STEPS.forEach((s,idx)=>{ rows+=`<tr><td style="padding:4px 8px;font-weight:600;">${s.label} <span class="did-link" data-jump="${idx}">Edit</span></td><td style="padding:4px 8px;">${escapeHtml(d[s.key]||'—')}</td></tr>`; });
+  card.innerHTML=`<h2>Review Form</h2><table style="width:100%;border-collapse:collapse;">${rows}</table>
+    <div class="btn-row" style="margin-top:14px;"><button class="btn btn-outline" id="rv-cancel">Cancel</button><button class="btn btn-gold" id="rv-save">Save Form</button></div>`;
+  card.querySelectorAll('[data-jump]').forEach(el=>el.addEventListener('click',()=>{ wizard.step=parseInt(el.dataset.jump); renderStep(); }));
+  document.getElementById('rv-cancel').addEventListener('click',cancelWizard);
+  document.getElementById('rv-save').addEventListener('click',submitForm);
+}
+function editRecord(id){
+  if(!canGeneral()){ permDenied(); return; }
+  const r=records.find(x=>x._id===id); if(!r) return;
+  wizard={ data:{...r}, step:-1+1, editingId:id }; wizard.step=0; renderStep();
+}
+function submitForm(){
+  const rec={...wizard.data, subFolder:REPAIR_BUILDING, hospitalId:currentHospitalId};
+  rec.importComplete = isComplete(rec);
+  if(wizard.editingId){ const i=records.findIndex(r=>r._id===wizard.editingId); if(i>=0){ rec._id=wizard.editingId; records[i]=rec; } }
+  else { rec._id='rec_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); records.push(rec); }
+  saveLocal(); fbSave(rec);
+  wizard=null; switchView('log'); showToast('Form saved');
+}
+
+/* =========================================================
+   DASHBOARD
+   ========================================================= */
+function renderDashboard(){
+  const scoped=scopedRecords();
+  const total=scoped.length;
+  const complete=scoped.filter(isComplete).length;
+  const incomplete=total-complete;
+  const decom=scoped.filter(r=>r.repairMade==='Decommissioned').length;
+  const repaired=scoped.filter(r=>REPAIR_GROUP.includes(r.repairMade)).length;
+  const replaced=scoped.filter(r=>REPLACED_GROUP.includes(r.repairMade)).length;
+  const pct=total?Math.round((complete/total)*100):0;
+  document.getElementById('dash-title').textContent = currentHospitalDisplay + ' — Repairs & Decommissions';
+  document.getElementById('stat-total').textContent=total;
+  document.getElementById('stat-complete').textContent=complete;
+  document.getElementById('stat-incomplete').textContent=incomplete;
+  document.getElementById('stat-decom').textContent=decom;
+  document.getElementById('stat-repaired').textContent=repaired;
+  document.getElementById('stat-replaced').textContent=replaced;
+  document.getElementById('progress-fill').style.width=pct+'%';
+  document.getElementById('progress-pct').textContent=pct+'% Complete';
+  document.getElementById('progress-count').textContent=`${complete} / ${total}`;
+  document.querySelectorAll('#view-dashboard .stat[data-filter]').forEach(card=>{
+    card.onclick=()=>{ pendingFilter=card.dataset.filter; switchView('log'); };
+  });
+}
+
+/* =========================================================
+   LOG
+   ========================================================= */
+let pendingFilter=null;
+const LOG_COLUMNS=[
+  ['Damper Name','damperId'],['Status','__status'],['Repair Made','repairMade'],
+  ['Cochran','cochranScope'],['Fire Alarm','fireAlarm'],['Climatech','climatechScope'],
+  ['Size Matches','sizeMatchesSchedule'],['Test','testResult'],['Date','dateTested'],
+  ['Alias','damperAlias'],['Equipment','equipmentName'],['Room Name','roomName'],
+  ['Room #','roomNumber'],['Floor','floor'],['Size','damperSize'],['Type','damperType'],
+  ['Installed In','installedIn'],['Shutdown','requiresShutdown'],['Critical','criticalArea'],['Photos','__photos'],['Notes','notes'],
+];
+function clearFilters(){
+  ['f-damper','f-equip','f-repair','f-cochran','f-climatech','f-firealarm','f-status','f-dtype','f-map'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  pendingFilter=null;
+  renderLog();
+}
+const HIDDEN_COLS_KEY='fsd_repairs_hidden_cols_v1';
+function getHiddenCols(){ try{ return JSON.parse(localStorage.getItem(HIDDEN_COLS_KEY))||[]; }catch(e){ return []; } }
+function setHiddenCols(arr){ try{ localStorage.setItem(HIDDEN_COLS_KEY, JSON.stringify(arr)); }catch(e){} }
+function hideCol(key){
+  if(key==='damperId'){ showToast('The name column can\u2019t be hidden'); return; }
+  const h=getHiddenCols();
+  if(!h.includes(key)) h.push(key);
+  setHiddenCols(h);
+  renderLog();
+}
+function restoreCols(){ setHiddenCols([]); renderLog(); showToast('All columns shown'); }
+function showCol(key){
+  const h=getHiddenCols().filter(k=>k!==key);
+  setHiddenCols(h);
+  renderLog();
+}
+// Generic hidden-column storage for BAS and Schedule tables
+const BAS_HIDDEN_KEY='fsd_repairs_bas_hidden_v1';
+const SCH_HIDDEN_KEY='fsd_repairs_sch_hidden_v1';
+function getHidden(key){ try{ return JSON.parse(localStorage.getItem(key))||[]; }catch(e){ return []; } }
+function setHidden(key,arr){ try{ localStorage.setItem(key, JSON.stringify(arr)); }catch(e){} }
+function basHideCol(k){ if(k==='oldName'){ showToast('The Old Name column can\u2019t be hidden'); return; } const h=getHidden(BAS_HIDDEN_KEY); if(!h.includes(k)) h.push(k); setHidden(BAS_HIDDEN_KEY,h); renderBas(); }
+function basShowCol(k){ setHidden(BAS_HIDDEN_KEY, getHidden(BAS_HIDDEN_KEY).filter(x=>x!==k)); renderBas(); }
+function basRestoreCols(){ setHidden(BAS_HIDDEN_KEY,[]); renderBas(); showToast('All columns shown'); }
+function schHideCol(k){ if(k==='date'){ showToast('The Date column can\u2019t be hidden'); return; } const h=getHidden(SCH_HIDDEN_KEY); if(!h.includes(k)) h.push(k); setHidden(SCH_HIDDEN_KEY,h); renderSchedule(); }
+function schShowCol(k){ setHidden(SCH_HIDDEN_KEY, getHidden(SCH_HIDDEN_KEY).filter(x=>x!==k)); renderSchedule(); }
+function schRestoreCols(){ setHidden(SCH_HIDDEN_KEY,[]); renderSchedule(); showToast('All columns shown'); }
+function renderLog(){
+  const scoped=scopedRecords();
+  if(pendingFilter!==null){
+    const map={'__complete__':()=>{document.getElementById('f-status').value='__complete__';},
+      '__incomplete__':()=>{document.getElementById('f-status').value='__incomplete__';},
+      'all':()=>{document.getElementById('f-status').value='';document.getElementById('f-repair').value='';},
+      'Decommissioned':()=>{document.getElementById('f-repair').value='Decommissioned';},
+      '__repairs__':()=>{document.getElementById('f-repair').value='__repairs__';},
+      '__replaced__':()=>{document.getElementById('f-repair').value='__replaced__';}};
+    if(map[pendingFilter]) map[pendingFilter]();
+    pendingFilter=null;
+  }
+  const qD=document.getElementById('f-damper').value.trim().toLowerCase();
+  const qE=document.getElementById('f-equip').value.trim().toLowerCase();
+  const fR=document.getElementById('f-repair').value;
+  const fC=document.getElementById('f-cochran').value;
+  const fCl=document.getElementById('f-climatech').value;
+  const fF=document.getElementById('f-firealarm').value;
+  const fS=document.getElementById('f-status').value;
+  const fT=document.getElementById('f-dtype').value;
+  const fM=document.getElementById('f-map').value;
+  const mapLabelSet = (mapData && mapData.pages) ? new Set([].concat(...mapData.pages.map(p=>p.labels.map(l=>normDamperId(l.t))))) : null;
+  const onMapFn = (r)=> mapLabelSet ? mapLabelSet.has(normDamperId(baseDamperName(r.damperId))) : false;
+  const typeSel=document.getElementById('f-dtype');
+  if(typeSel){
+    const types=[...new Set(scoped.map(r=>r.damperType).filter(Boolean))].sort();
+    const cur=typeSel.value;
+    typeSel.innerHTML='<option value="">Type: All</option>'+types.map(t=>`<option ${t===cur?'selected':''}>${escapeHtml(t)}</option>`).join('');
+    typeSel.value=cur;
+  }
+  const scopeMatch=(v,f)=>{ if(!f) return true; const val=(v||'').trim(); if(f==='__blank__') return val===''; return val===f; };
+  let filtered=scoped.filter(r=>{
+    if(qD && !(r.damperId||'').toLowerCase().includes(qD)) return false;
+    if(qE && !(r.equipmentName||'').toLowerCase().includes(qE)) return false;
+    if(fR==='__repairs__'){ if(!REPAIR_GROUP.includes(r.repairMade)) return false; }
+    else if(fR==='__replaced__'){ if(!REPLACED_GROUP.includes(r.repairMade)) return false; }
+    else if(fR && r.repairMade!==fR) return false;
+    if(!scopeMatch(r.cochranScope,fC)) return false;
+    if(!scopeMatch(r.climatechScope,fCl)) return false;
+    if(!scopeMatch(r.fireAlarm,fF)) return false;
+    if(fS==='__complete__' && !isComplete(r)) return false;
+    if(fS==='__incomplete__' && isComplete(r)) return false;
+    if(fT && r.damperType!==fT) return false;
+    if(fM==='__on__' && !onMapFn(r)) return false;
+    if(fM==='__off__' && onMapFn(r)) return false;
+    return true;
+  });
+  const head=document.getElementById('log-table-head');
+  const body=document.getElementById('log-table-body');
+  const empty=document.getElementById('log-empty');
+  const table=document.getElementById('log-table');
+  // Filtered quantity display
+  const cnt=document.getElementById('log-count');
+  if(cnt) cnt.textContent=`Showing ${filtered.length} of ${scoped.length} forms`;
+  const hidden=getHiddenCols();
+  const visibleCols=LOG_COLUMNS.filter(([h,k])=>!hidden.includes(k));
+  // Hidden-column restore chips — tap one to bring that column back
+  const hcEl=document.getElementById('hidden-cols');
+  if(hcEl){
+    if(hidden.length){
+      const labelFor=k=>{ const col=LOG_COLUMNS.find(([h,kk])=>kk===k); return col?col[0]:k; };
+      hcEl.innerHTML=`<span style="font-size:11px;color:var(--text-dim);margin-right:4px;">Hidden (tap to show):</span>`+
+        hidden.map(k=>`<button class="show-col" data-col="${k}" style="font-size:11px;border:1px solid var(--line);border-radius:12px;padding:3px 10px;margin:0 4px 4px 0;background:var(--panel);cursor:pointer;">+ ${escapeHtml(labelFor(k))}</button>`).join('');
+      hcEl.querySelectorAll('.show-col').forEach(b=>b.addEventListener('click',()=>showCol(b.dataset.col)));
+    } else { hcEl.innerHTML=''; }
+  }
+  head.innerHTML=visibleCols.map(([h,k],i)=>`<th${i===0?' class="sticky-col"':''} data-col="${k}" title="Tap to hide this column" style="cursor:pointer;white-space:nowrap;">${h} <span style="font-size:9px;font-weight:600;color:var(--navy-dim);background:var(--panel2);border-radius:3px;padding:1px 4px;">hide</span></th>`).join('')+'<th>Actions</th>';
+  head.onclick=function(e){
+    const th=e.target.closest('th[data-col]');
+    if(!th) return;
+    hideCol(th.dataset.col);
+  };
+  if(!filtered.length){ body.innerHTML=''; table.style.display='none'; empty.style.display='block'; empty.innerHTML='No forms match your filters.'; return; }
+  table.style.display=''; empty.style.display='none';
+  const badge={Pass:'pass',Fail:'fail',Decommissioned:'decom',"Can't Test":'fail'};
+  // Pair up multi-round dampers: the newest (plain name) is the main row;
+  // older rounds ("- Round N") collapse into a dropdown under it.
+  const buildRow=(r, isSub)=>{
+    const ecls=(key)=>{ const sc=(key==='__status')?'general':recordFieldScope(key); return can(sc)?'editable':''; };
+    const cells=visibleCols.map(([h,key])=>{
+      if(key==='__status') return `<td class="${ecls('__status')}" data-ek="__status" data-id="${r._id}">${isComplete(r)?'<span class="badge pass">Complete</span>':'<span class="badge fail">Incomplete</span>'}</td>`;
+      if(key==='__photos') return `<td>${(r.photos||[]).length}/${MAX_PHOTOS}</td>`;
+      if(key==='testResult') return `<td class="${ecls('testResult')}" data-ek="testResult" data-id="${r._id}">${r.testResult?`<span class="badge ${badge[r.testResult]||''}">${r.testResult}</span>`:'—'}</td>`;
+      if(key==='damperId'){
+        const onMap = mapLabelSet ? mapLabelSet.has(normDamperId(baseDamperName(r.damperId))) : true;
+        const flag = onMap ? '' : ` <span class="badge fail nomap-flag" data-id="${r._id}" title="Not on the map — click to place it (laptop)" style="font-size:10px;cursor:pointer;">&#9873; Not on map</span>`;
+        const editBtn = canGeneral()?`<button class="btn btn-outline btn-xs" data-action="edit" data-id="${r._id}">Edit</button>`:'';
+        return `<td class="sticky-col" style="${isSub?'padding-left:24px;background:var(--panel2);':''}"><div style="display:flex;align-items:center;gap:8px;">${editBtn}<button class="btn btn-outline btn-xs" data-action="open" data-id="${r._id}">PDF</button><span class="did-link" data-action="map" data-id="${r._id}">${escapeHtml(r.damperId||'—')}</span>${flag}</div></td>`;
+      }
+      return `<td class="${ecls(key)}" data-ek="${key}" data-id="${r._id}">${escapeHtml(r[key]||'—')}</td>`;
+    }).join('');
+    const setlocBtn = canGeneral()?`<button class="btn btn-outline" data-action="setloc" data-id="${r._id}">Set Location</button>`:'';
+    const delBtn = canGeneral()?`<button class="btn btn-danger" data-action="del" data-id="${r._id}">Del</button>`:'';
+    const actions=`<td><div class="actions-cell">${setlocBtn}${delBtn||'<span style="color:#bbb;font-size:11px;">view only</span>'}</div></td>`;
+    return `<tr${isSub?' class="round-sub" style="display:none;"':''} data-base="${escapeHtml(normDamperId(baseDamperName(r.damperId)))}">${cells}${actions}</tr>`;
+  };
+
+  // Group filtered rows by base damper name
+  const groups={};
+  filtered.forEach(r=>{ const b=normDamperId(baseDamperName(r.damperId)); (groups[b]=groups[b]||[]).push(r); });
+  // Preserve original (reversed = newest-first) ordering by first appearance
+  const seen=new Set(); const order=[];
+  filtered.slice().reverse().forEach(r=>{ const b=normDamperId(baseDamperName(r.damperId)); if(!seen.has(b)){ seen.add(b); order.push(b); } });
+
+  body.innerHTML=order.map(b=>{
+    const recs=groups[b];
+    // newest = the plain-name record, else the one with highest/none round
+    const roundNum=x=>{ const m=/-\s*Round\s*(\d+)\s*$/i.exec(x.damperId||''); return m?parseInt(m[1]):Infinity; };
+    recs.sort((a,c)=>roundNum(c)-roundNum(a)); // plain (Infinity) first
+    const main=recs[0];
+    const subs=recs.slice(1);
+    let html=buildRow(main,false);
+    if(subs.length){
+      // Add a dropdown toggle into the main row's first cell
+      const toggle=`<button class="btn btn-outline btn-xs round-toggle" data-base="${escapeHtml(b)}" style="margin-left:6px;">▸ ${subs.length} prior</button>`;
+      html=html.replace('</div></td>', toggle+'</div></td>');
+      html+=subs.map(s=>buildRow(s,true)).join('');
+    }
+    return html;
+  }).join('');
+  body.onclick=function(e){
+    // Round dropdown toggle
+    const rt=e.target.closest('.round-toggle');
+    if(rt){
+      const base=rt.dataset.base;
+      const subs=body.querySelectorAll(`tr.round-sub[data-base="${CSS.escape(base)}"]`);
+      const showing=rt.textContent.startsWith('▾');
+      subs.forEach(tr=>tr.style.display=showing?'none':'');
+      rt.textContent=(showing?'▸':'▾')+rt.textContent.slice(1);
+      return;
+    }
+    // Not-on-map flag → placement flow (laptop)
+    const nf=e.target.closest('.nomap-flag');
+    if(nf){ startMapPlacement(nf.dataset.id); return; }
+    const btn=e.target.closest('[data-action]');
+    if(btn){
+      const id=btn.dataset.id; const r=records.find(x=>x._id===id);
+      if(btn.dataset.action==='edit') editRecord(id), switchView('inspect');
+      if(btn.dataset.action==='open' && r) openReport(r);
+      if(btn.dataset.action==='map' && r) jumpToMap(r.damperId);
+      if(btn.dataset.action==='setloc' && r) startMapPlacement(id);
+      if(btn.dataset.action==='del') delRecord(id);
+      return;
+    }
+    const td=e.target.closest('td.editable[data-ek]');
+    if(td) openCellEditor(td.dataset.id, td.dataset.ek);
+  };
+}
+function delRecord(id){
+  if(!canGeneral()){ permDenied(); return; }
+  if(!confirm('Delete this form permanently?')) return;
+  records=records.filter(r=>r._id!==id); saveLocal(); fbDelete(id); renderLog(); renderDashboard();
+}
+
+/* ---- Report ---- */
+function reportStyles(){
+  return `
+      *{box-sizing:border-box;}
+      body{font-family:'Helvetica Neue',Arial,Helvetica,sans-serif;margin:0;color:#1a1a1a;font-size:12px;background:#fff;}
+      .report-page{max-width:820px;margin:0 auto;padding:28px 34px;page-break-after:always;}
+      .report-page:last-child{page-break-after:auto;}
+      .rhead{display:flex;align-items:center;gap:16px;border-bottom:3px solid #1a237e;padding-bottom:14px;margin-bottom:6px;}
+      .rhead img{height:44px;width:auto;display:block;}
+      .rhead .htitle{flex:1;}
+      .rhead .htitle .t1{font-size:20px;font-weight:800;color:#1a237e;letter-spacing:0.5px;line-height:1.1;}
+      .rhead .htitle .t2{font-size:12px;font-weight:600;color:#c0392b;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
+      .rhead .hmeta{text-align:right;font-size:11px;color:#555;line-height:1.5;}
+      .rhead .hmeta b{color:#1a1a1a;}
+      .damper-band{background:#1a237e;color:#fff;padding:8px 14px;border-radius:5px;font-size:17px;font-weight:700;letter-spacing:0.5px;margin:12px 0 16px;display:flex;justify-content:space-between;align-items:center;}
+      .damper-band .status{font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;text-transform:uppercase;letter-spacing:0.5px;}
+      .status.complete{background:#1e7d3c;color:#fff;}
+      .status.incomplete{background:#c0392b;color:#fff;}
+      .cols{display:flex;gap:20px;align-items:flex-start;}
+      .col{flex:1;min-width:0;}
+      .col.right{max-width:210px;}
+      .grp-title{font-size:11px;font-weight:800;color:#1a237e;text-transform:uppercase;letter-spacing:0.8px;border-bottom:1px solid #d5d9ec;padding-bottom:4px;margin:0 0 8px;}
+      .f{margin-bottom:9px;}
+      .fl{font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.4px;display:block;}
+      .fv{display:block;font-size:13px;padding:2px 0 3px;border-bottom:1px solid #e2e5f0;min-height:18px;font-weight:500;}
+      .sec{border:1.5px solid #c0392b;border-radius:6px;padding:12px;margin-top:14px;background:#fdf5f4;}
+      .sec .h{color:#c0392b;text-align:center;font-weight:800;margin-bottom:10px;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;}
+      .photos{margin-top:4px;}
+      .photos .plabel{font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;}
+      .ph{display:block;width:100%;max-width:200px;border:1px solid #333;border-radius:3px;margin-bottom:10px;}
+      .ph-empty{width:100%;max-width:200px;height:150px;border:1px dashed #bbb;border-radius:3px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:11px;}
+      .notes{margin-top:18px;}
+      .notes .fl{margin-bottom:5px;}
+      .notes-box{border:1px solid #333;border-radius:4px;min-height:90px;padding:10px;white-space:pre-wrap;font-size:12px;}
+      .rfoot{margin-top:20px;padding-top:10px;border-top:1px solid #d5d9ec;font-size:10px;color:#888;display:flex;justify-content:space-between;}
+      @media print{ .report-page{padding:16px 20px;} @page{margin:0.4in;} }`;
+}
+function reportBody(r){
+  const f=(l,v)=>`<div class="f"><span class="fl">${l}</span><span class="fv">${escapeHtml(v||'\u2014')}</span></div>`;
+  const complete=isComplete(r);
+  const photos=(r.photos&&r.photos.length)
+    ? r.photos.map(p=>`<img src="${p}" class="ph">`).join('')
+    : '<div class="ph-empty">No photo</div><div class="ph-empty">No photo</div>';
+  const hosp = (typeof currentHospitalDisplay!=='undefined' && currentHospitalDisplay) ? currentHospitalDisplay : 'Kaiser Sunnyside';
+  const today = new Date();
+  const printed = (today.getMonth()+1)+'/'+today.getDate()+'/'+today.getFullYear();
+  return `<div class="report-page">
+    <div class="rhead">
+      <img src="${ARCTIC_LOGO}" alt="ARCTIC">
+      <div class="htitle">
+        <div class="t1">Fire Damper Inspection</div>
+        <div class="t2">Repairs &amp; Decommissions</div>
+      </div>
+      <div class="hmeta"><b>${escapeHtml(hosp)}</b><br>Date of Inspection: <b>${escapeHtml(r.dateTested||'\u2014')}</b><br>Floor: <b>${escapeHtml(r.floor||'\u2014')}</b></div>
+    </div>
+    <div class="damper-band"><span>${escapeHtml(r.damperId||'\u2014')}</span><span class="status ${complete?'complete':'incomplete'}">${complete?'Complete':'Incomplete'}</span></div>
+    <div class="cols">
+      <div class="col">
+        <div class="grp-title">Damper Details</div>
+        ${f('Damper Alias',r.damperAlias)}
+        ${f('Equipment Name',r.equipmentName)}
+        ${f('Damper Type',r.damperType)}
+        ${f('Angle Ring',r.angleRing)}
+        ${f('Actuator Type',r.actuatorType)}
+        ${f('Indicator Light',r.indicatorLight)}
+        ${f('Damper Size',r.damperSize)}
+      </div>
+      <div class="col">
+        <div class="grp-title">Location</div>
+        ${f('Room Name',r.roomName)}
+        ${f('Room Number',r.roomNumber)}
+        ${f('Installed In',r.installedIn)}
+        ${f('Requires Shutdown?',r.requiresShutdown)}
+        ${f('Critical Area?',r.criticalArea)}
+        ${f('Test',r.testResult)}
+        <div class="sec">
+          <div class="h">Repair, Decommission &amp; Replace</div>
+          ${f('Repair Made',r.repairMade)}
+          ${f('Cochran Scope',r.cochranScope)}
+          ${f('Fire Alarm',r.fireAlarm)}
+          ${f('Climatech Scope',r.climatechScope)}
+          ${f('If Decommissioned, Size Matches Schedule?',r.sizeMatchesSchedule)}
+        </div>
+      </div>
+      <div class="col right">
+        <div class="grp-title">Photos</div>
+        <div class="photos">${photos}</div>
+      </div>
+    </div>
+    <div class="notes"><span class="fl">Notes</span><div class="notes-box">${escapeHtml(r.notes||'')}</div></div>
+    <div class="rfoot"><span>ARCTIC Mechanical \u2014 Fire Damper Inspection</span><span>Printed ${printed}</span></div>
+  </div>`;
+}
+function openReport(r){
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>${escapeHtml(r.damperId)}</title><style>${reportStyles()}</style></head><body>${reportBody(r)}</body></html>`);
+  w.document.close();
+}
+
+/* =========================================================
+   ZIP IMPORT
+   ========================================================= */
+const PDF_FIELD_MAP={
+  'Angle Ring Notes(1)':'dateTested','Angle Ring Notes(2)':'damperId','Angle Ring Notes(3)':'damperAlias',
+  'Angle Ring Notes(4)':'equipmentName','Angle Ring Notes(5)':'roomName','Angle Ring Notes(6)':'damperSize',
+  'Angle Ring Notes(8)':'roomNumber','Damper Type':'damperType','Angle Ring':'angleRing','Angle Ring Notes':'angleRingNotes',
+  'ActuatorType':'actuatorType','Indicator Light':'indicatorLight','Floor':'floor','Installed In':'installedIn',
+  'Requires Shutdown':'requiresShutdown','Critical Area ':'criticalArea','Test':'testResult',
+  'Floor(1)':'repairMade','Floor(2)':'cochranScope','Floor(3)':'climatechScope','Floor(5)':'fireAlarm',
+  'Floor(4)':'sizeMatchesSchedule','Notes':'notes',
+};
+function cleanDamperName(fn){ let n=fn.split('/').pop().replace(/\.pdf$/i,'').replace(/^\.+/,''); return n.trim(); }
+async function readPdfFields(buf){
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise; const out={};
+  for(let p=1;p<=pdf.numPages;p++){ const page=await pdf.getPage(p); const annots=await page.getAnnotations();
+    annots.forEach(a=>{ if(a.fieldName==null) return; let v=a.fieldValue; if(Array.isArray(v)) v=v.join(', '); if(v==null) v=''; out[a.fieldName]=String(v).trim(); }); }
+  return out;
+}
+function pdfToRecord(fields,name){ const rec={}; Object.entries(PDF_FIELD_MAP).forEach(([pk,rk])=>{ if(fields[pk]) rec[rk]=fields[pk].trim(); }); rec.damperId=name; return rec; }
+
+/* ---- Photo extraction from PDF (Bluebeam-embedded images) ----
+   Photos live inside Form XObjects; PDF.js exposes them via the operator
+   list. We skip wide banners (the Arctic logo) by aspect ratio, downscale
+   to keep Firestore docs small, and keep at most 2 per form. */
+const MAX_PHOTOS=2;
+function imgObjToJpeg(img){
+  try{
+    if(!img || !img.width || !img.data) return null;
+    const canvas=document.createElement('canvas');
+    canvas.width=img.width; canvas.height=img.height;
+    const ctx=canvas.getContext('2d');
+    const out=ctx.createImageData(img.width,img.height);
+    const src=img.data, dst=out.data;
+    if(img.kind===3){ dst.set(src.subarray(0,dst.length)); }           // RGBA_32BPP
+    else if(img.kind===2){ for(let i=0,j=0;j<dst.length;i+=3,j+=4){ dst[j]=src[i]; dst[j+1]=src[i+1]; dst[j+2]=src[i+2]; dst[j+3]=255; } } // RGB_24BPP
+    else { canvas.width=canvas.height=0; return null; }
+    ctx.putImageData(out,0,0);
+    // Downscale to max 700px long edge so records stay well under Firestore's 1MB doc limit
+    const MAXD=700; let w=img.width,h=img.height;
+    if(Math.max(w,h)>MAXD){ const s=MAXD/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+    const out2=document.createElement('canvas'); out2.width=w; out2.height=h;
+    out2.getContext('2d').drawImage(canvas,0,0,w,h);
+    const url=out2.toDataURL('image/jpeg',0.78);
+    canvas.width=canvas.height=0; out2.width=out2.height=0;
+    return url;
+  }catch(e){ return null; }
+}
+async function extractPdfPhotos(page){
+  try{
+    const opList=await page.getOperatorList();
+    const ids=[];
+    for(let i=0;i<opList.fnArray.length;i++){
+      if(opList.fnArray[i]===pdfjsLib.OPS.paintImageXObject) ids.push(opList.argsArray[i][0]);
+    }
+    const photos=[];
+    for(const id of ids){
+      if(photos.length>=MAX_PHOTOS) break;
+      let img=null;
+      try{ img=await new Promise(res=>{ try{ page.objs.get(id,o=>res(o)); }catch(e){ res(null); } }); }catch(e){}
+      if(!img||!img.width) continue;
+      const aspect=img.width/img.height;
+      if(aspect>2.5||aspect<0.25) continue;          // banners / logo strips
+      if(img.width*img.height<10000) continue;       // icons
+      const url=imgObjToJpeg(img);
+      if(url) photos.push(url);
+    }
+    return photos;
+  }catch(e){ console.error('photo extract',e); return []; }
+}
+
+// Map one page's raw field values ({pdfFieldName: value}) to record keys.
+// Tolerates duplicate-field suffixes that PDF combiners add (e.g. "Damper Type_2",
+// "Test#1", "Notes.0") while NOT confusing template names like "Floor(1)".
+function mapPageFields(raw){
+  const rec={};
+  const keys=Object.keys(PDF_FIELD_MAP).sort((a,b)=>b.length-a.length); // longest first
+  for(const [fname,val] of Object.entries(raw)){
+    if(!val) continue;
+    if(PDF_FIELD_MAP[fname]!==undefined){ rec[PDF_FIELD_MAP[fname]]=val.trim(); continue; }
+    for(const k of keys){
+      if(fname.startsWith(k)){
+        const rest=fname.slice(k.length);
+        if(/^[_#.]\d+$/.test(rest) || /^ \d+$/.test(rest) || /^\s*\[\d+\]$/.test(rest)){ rec[PDF_FIELD_MAP[k]]=val.trim(); break; }
+      }
+    }
+  }
+  return rec;
+}
+
+// Read a PDF into one {recFields, photos} entry PER PAGE.
+// Multi-page files are multiple repair rounds: page 1 = newest.
+async function readPdfPages(buf){
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const out=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const annots=await page.getAnnotations();
+    const raw={};
+    annots.forEach(a=>{ if(a.fieldName==null) return; let v=a.fieldValue; if(Array.isArray(v)) v=v.join(', '); if(v==null) v=''; raw[a.fieldName]=String(v).trim(); });
+    const photos=await extractPdfPhotos(page);
+    out.push({ recFields: mapPageFields(raw), photos: photos.slice(0,MAX_PHOTOS) });
+  }
+  return out;
+}
+async function handleZipImport(ev){
+  if(!canGeneral()){ permDenied(); try{ev.target.value='';}catch(e){} return; }
+  const file=ev.target.files&&ev.target.files[0]; if(!file) return;
+  if(typeof JSZip==='undefined'){ showToast('ZIP lib not loaded'); return; }
+  let banner=document.getElementById('imp-banner');
+  if(!banner){ banner=document.createElement('div'); banner.id='imp-banner'; banner.style.cssText='position:fixed;top:0;left:0;right:0;z-index:800;background:#1a237e;color:#fff;padding:12px;text-align:center;font-weight:600;font-size:13px;'; document.body.appendChild(banner); }
+  const prog=m=>banner.textContent=m; const fail=m=>{ banner.style.background='#c0392b'; prog(m); setTimeout(()=>banner.remove(),6000); };
+  try{
+    prog('Reading ZIP...');
+    const zip=await JSZip.loadAsync(file); const entries=[];
+    zip.forEach((path,e)=>{ if(!e.dir && /\.pdf$/i.test(path) && !path.startsWith('__MACOSX')) entries.push(e); });
+    if(!entries.length){ fail('No PDFs in ZIP'); return; }
+    let added=0,updated=0,incomplete=0;
+    for(let i=0;i<entries.length;i++){
+      const e=entries[i]; const name=cleanDamperName(e.name);
+      prog(`Importing ${i+1}/${entries.length}: ${name}`);
+      // One record PER PAGE: page 1 is the newest round and keeps the plain
+      // name; older rounds get " - Round N" (last page = Round 1).
+      let pageRecs=[];
+      try{
+        const buf=await e.async('arraybuffer');
+        const pages=await readPdfPages(buf);
+        const N=pages.length;
+        pages.forEach((pg,idx)=>{
+          const rec={...pg.recFields};
+          rec.damperId = idx===0 ? name : `${name} - Round ${N-idx}`;
+          if(pg.photos.length) rec.photos=pg.photos;
+          pageRecs.push(rec);
+        });
+        if(!pageRecs.length) pageRecs=[{damperId:name}];
+      }
+      catch(err){ console.error('read failed', e.name, err); pageRecs=[{damperId:name}]; }
+
+      for(const rec of pageRecs){
+        rec.hospitalId=currentHospitalId; rec.subFolder=REPAIR_BUILDING; rec.importComplete=isComplete(rec);
+        if(!rec.importComplete) incomplete++;
+        const ex=records.find(r=>r.subFolder===REPAIR_BUILDING && normDamperId(r.damperId)===normDamperId(rec.damperId));
+        if(ex){ Object.assign(ex,rec,{_id:ex._id}); saveLocal(); fbSave(ex); updated++; }
+        else { rec._id='rec_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); records.push(rec); saveLocal(); fbSave(rec); added++; }
+      }
+    }
+    banner.style.background='#1a237e'; prog(`✓ ${added} new, ${updated} updated, ${incomplete} incomplete`);
+    setTimeout(()=>banner.remove(),5000);
+    if(ev.target) try{ev.target.value='';}catch(e){}
+    renderLog(); renderDashboard();
+  }catch(e){ console.error(e); fail('Import failed: '+(e.message||e)); }
+}
+
+/* =========================================================
+   EXPORT
+   ========================================================= */
+const EXPORT_COLS=[['Damper Name','damperId'],['Complete','__complete'],['Date','dateTested'],['Alias','damperAlias'],
+  ['Equipment','equipmentName'],['Room Name','roomName'],['Room Number','roomNumber'],['Floor','floor'],['Size','damperSize'],
+  ['Damper Type','damperType'],['Installed In','installedIn'],['Requires Shutdown','requiresShutdown'],['Critical Area','criticalArea'],
+  ['Test','testResult'],['Repair Made','repairMade'],['Cochran Scope','cochranScope'],['Fire Alarm','fireAlarm'],
+  ['Climatech Scope','climatechScope'],['Size Matches Schedule','sizeMatchesSchedule'],['Notes','notes']];
+function buildRows(){ return scopedRecords().map(r=>{ const o={}; EXPORT_COLS.forEach(([h,k])=>{ o[h]= k==='__complete'?(isComplete(r)?'Yes':'No'):(r[k]||''); }); return o; }); }
+/* =========================================================
+   EXPORT REPORT PDFs — pick filters, then combined or individual
+   ========================================================= */
+function openPdfExportPicker(){
+  const scoped=scopedRecords();
+  const repairVals=[...new Set(scoped.map(r=>r.repairMade).filter(Boolean))].sort();
+  const typeVals=[...new Set(scoped.map(r=>r.damperType).filter(Boolean))].sort();
+  const floorVals=[...new Set(scoped.map(r=>r.floor).filter(Boolean))].sort();
+  const hasBlank=(key)=>scoped.some(r=>!String(r[key]||'').trim());
+  const blankChk=(g,key)=> hasBlank(key)?`<label class="pdf-chk"><input type="checkbox" data-g="${g}" value="__blank__"> (blank)</label>`:'';
+  const catHeader=(g,label)=>`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><span style="font-weight:700;font-size:12px;">${label}</span><label style="font-size:11px;color:var(--navy);cursor:pointer;"><input type="checkbox" class="pdf-all" data-grp="${g}" style="width:auto;vertical-align:middle;"> all</label></div>`;
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.innerHTML=`<div class="box" style="max-width:460px;width:100%;max-height:88vh;overflow:auto;">
+    <h2 style="margin:0 0 4px;">Export Report PDFs</h2>
+    <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px;">Pick which forms to include. Leave a group empty to include all of it. All filters combine.</p>
+    <label class="pdf-chk" style="background:var(--panel2);border-color:var(--navy);margin-bottom:12px;font-weight:700;"><input type="checkbox" id="pdf-select-all"> Select ALL forms</label>
+
+    ${catHeader('status','Status')}
+    <div class="pdf-grp" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      <label class="pdf-chk"><input type="checkbox" data-g="status" value="complete"> Complete</label>
+      <label class="pdf-chk"><input type="checkbox" data-g="status" value="incomplete"> Incomplete</label>
+    </div>
+
+    ${catHeader('repair','Repair Made')}
+    <div class="pdf-grp" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      ${repairVals.map(v=>`<label class="pdf-chk"><input type="checkbox" data-g="repair" value="${escapeHtml(v)}"> ${escapeHtml(v)}</label>`).join('')}${blankChk('repair','repairMade')}
+    </div>
+
+    ${catHeader('type','Damper Type')}
+    <div class="pdf-grp" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      ${typeVals.map(v=>`<label class="pdf-chk"><input type="checkbox" data-g="type" value="${escapeHtml(v)}"> ${escapeHtml(v)}</label>`).join('')}${blankChk('type','damperType')}
+    </div>
+
+    ${catHeader('floor','Floor')}
+    <div class="pdf-grp" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      ${floorVals.map(v=>`<label class="pdf-chk"><input type="checkbox" data-g="floor" value="${escapeHtml(v)}"> ${escapeHtml(v)}</label>`).join('')}${blankChk('floor','floor')}
+    </div>
+
+    <label class="pdf-chk" style="margin-bottom:14px;"><input type="checkbox" id="pdf-onmap-off"> Only dampers NOT on the map</label>
+
+    <div id="pdf-match-count" style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px;"></div>
+
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px;">Output</div>
+    <div class="btn-row" style="flex-direction:column;">
+      <button class="btn btn-primary" id="pdf-combined">Export all as ONE PDF</button>
+      <button class="btn btn-outline" id="pdf-individual">Export individually (one per damper)</button>
+      <button class="btn btn-outline" id="pdf-cancel" style="margin-top:6px;">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+
+  const mapLabelSet = (mapData && mapData.pages) ? new Set([].concat(...mapData.pages.map(p=>p.labels.map(l=>normDamperId(l.t))))) : null;
+  const getSel=g=>[...ov.querySelectorAll(`input[data-g="${g}"]:checked`)].map(c=>c.value);
+  const valOrBlank=(v)=>{ const s=String(v||'').trim(); return s===''?'__blank__':s; };
+  function matched(){
+    if(ov.querySelector('#pdf-select-all').checked) return scoped.slice();
+    const st=getSel('status'), rp=getSel('repair'), ty=getSel('type'), fl=getSel('floor');
+    const offOnly=ov.querySelector('#pdf-onmap-off').checked;
+    return scoped.filter(r=>{
+      if(st.length){ const s=isComplete(r)?'complete':'incomplete'; if(!st.includes(s)) return false; }
+      if(rp.length && !rp.includes(valOrBlank(r.repairMade))) return false;
+      if(ty.length && !ty.includes(valOrBlank(r.damperType))) return false;
+      if(fl.length && !fl.includes(valOrBlank(r.floor))) return false;
+      if(offOnly){ const on=mapLabelSet?mapLabelSet.has(normDamperId(baseDamperName(r.damperId))):false; if(on) return false; }
+      return true;
+    });
+  }
+  function refresh(){ const n=matched().length; ov.querySelector('#pdf-match-count').textContent=`${n} form${n===1?'':'s'} match`; }
+
+  // Per-category "all" toggles
+  ov.querySelectorAll('.pdf-all').forEach(master=>{
+    master.addEventListener('change',()=>{
+      const g=master.dataset.grp;
+      ov.querySelectorAll(`input[data-g="${g}"]`).forEach(cb=>{ cb.checked=master.checked; });
+      refresh();
+    });
+  });
+  // Master select-all disables/greys the individual pickers
+  ov.querySelector('#pdf-select-all').addEventListener('change',e=>{
+    const on=e.target.checked;
+    ov.querySelectorAll('.pdf-grp, #pdf-onmap-off, .pdf-all').forEach(el=>{ el.style.opacity=on?'0.4':'1'; });
+    refresh();
+  });
+  ov.addEventListener('change',refresh); refresh();
+
+  ov.querySelector('#pdf-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#pdf-combined').onclick=()=>{ const recs=matched(); if(!recs.length){ showToast('No forms match'); return; } ov.remove(); exportPdfsCombined(recs); };
+  ov.querySelector('#pdf-individual').onclick=()=>{ const recs=matched(); if(!recs.length){ showToast('No forms match'); return; } ov.remove(); exportPdfsIndividual(recs); };
+}
+function exportPdfsCombined(recs){
+  const w=window.open('','_blank');
+  if(!w){ showToast('Allow pop-ups to export PDFs'); return; }
+  const body=recs.map(r=>reportBody(r)).join('');
+  w.document.write(`<html><head><title>Repairs Reports (${recs.length})</title><style>${reportStyles()}</style></head><body>${body}
+    <script>window.onload=function(){setTimeout(function(){window.print();},400);}<\/script></body></html>`);
+  w.document.close();
+  showToast(`Opening ${recs.length} reports — use "Save as PDF"`);
+}
+function exportPdfsIndividual(recs){
+  if(recs.length>12 && !confirm(`This will open ${recs.length} print dialogs, one per damper. Continue?\n\n(Tip: "Export all as ONE PDF" is easier for large batches.)`)) return;
+  let i=0;
+  const doOne=()=>{
+    if(i>=recs.length) return;
+    const r=recs[i++];
+    const w=window.open('','_blank');
+    if(!w){ showToast('Allow pop-ups to export PDFs'); return; }
+    w.document.write(`<html><head><title>${escapeHtml(r.damperId)}</title><style>${reportStyles()}</style></head><body>${reportBody(r)}
+      <script>window.onload=function(){setTimeout(function(){window.print();},400);}<\/script></body></html>`);
+    w.document.close();
+    setTimeout(doOne, 800); // stagger so browsers don't block the burst
+  };
+  doOne();
+  showToast(`Opening ${recs.length} individual reports`);
+}
+function promptExportFormat(){
+  if(!scopedRecords().length){ showToast('No forms to export'); return; }
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.innerHTML=`<div class="box" style="text-align:center;"><h2>Export Log</h2><p style="font-size:13px;color:var(--text-dim);margin-bottom:14px;">What would you like to export?</p>
+    <div class="btn-row" style="flex-direction:column;"><button class="btn" data-f="xlsx">Spreadsheet — Excel (.xlsx)</button><button class="btn btn-outline" data-f="csv">Spreadsheet — CSV (.csv)</button><button class="btn" data-f="pdf" style="background:var(--red);color:#fff;border-color:var(--red);">Report PDFs</button><button class="btn btn-outline" data-f="cancel" style="margin-top:6px;">Cancel</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{ const b=e.target.closest('[data-f]'); if(!b) return; const f=b.dataset.f; ov.remove(); if(f==='xlsx') expXlsx(); else if(f==='csv') expCsv(); else if(f==='pdf') openPdfExportPicker(); });
+}
+function expXlsx(){ const ws=XLSX.utils.json_to_sheet(buildRows()); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Repairs'); XLSX.writeFile(wb,'Repairs_Decommissions_Log.xlsx'); }function expCsv(){ const rows=buildRows(); if(!rows.length) return; const cols=Object.keys(rows[0]); const csv=[cols.join(',')].concat(rows.map(r=>cols.map(c=>{ let v=String(r[c]==null?'':r[c]); if(/[",\n]/.test(v)) v='"'+v.replace(/"/g,'""')+'"'; return v; }).join(','))).join('\n'); const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='Repairs_Decommissions_Log.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+
+/* =========================================================
+   CLEAR LOG (PIN 1977 + confirm)
+   ========================================================= */
+function openLogSettings(){
+  if(!canGeneral()){ permDenied(); return; }
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.innerHTML=`<div class="box" style="max-width:380px;width:100%;">
+    <h2 style="margin:0 0 4px;">Log Settings</h2>
+    <p style="font-size:12px;color:var(--text-dim);margin:0 0 16px;">Administrative actions for this job's log.</p>
+    <button class="btn btn-danger" id="ls-clear" style="width:100%;">Clear Entire Log</button>
+    <p style="font-size:11px;color:var(--text-dim);margin:8px 0 16px;">Permanently deletes every form in this log. PIN required.</p>
+    <button class="btn btn-outline" id="ls-close" style="width:100%;">Close</button>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#ls-close').onclick=()=>ov.remove();
+  ov.querySelector('#ls-clear').onclick=()=>{ ov.remove(); promptClearLog(); };
+}
+function promptClearLog(){
+  if(!canGeneral()){ permDenied(); return; }
+  const scoped=scopedRecords();
+  if(!scoped.length){ showToast('Log is already empty'); return; }
+  openPinGate('Clear Log','Enter PIN to clear the log',()=>{
+    if(!confirm(`Permanently delete ALL ${scoped.length} forms in Repairs & Decommissions?\n\nThis cannot be undone.`)) return;
+    if(!confirm('Are you absolutely sure? This wipes every form in this log.')) return;
+    const ids=scoped.map(r=>r._id);
+    ids.forEach(id=>fbDelete(id));
+    records=records.filter(r=>!ids.includes(r._id));
+    saveLocal(); renderLog(); renderDashboard();
+    showToast(`Cleared ${ids.length} forms`);
+  }, CLEAR_LOG_PIN);
+}
+
+/* ---- PIN ---- */
+let pinBuffer='', pinCallback=null, pinExpected=null;
+function openPinGate(title,desc,cb,pin){ pinBuffer=''; pinCallback=cb; pinExpected=pin||CLEAR_LOG_PIN; updateDots(); document.getElementById('pin-title').textContent=title; document.getElementById('pin-desc').textContent=desc; document.getElementById('pin-overlay').style.display='flex'; }
+function pinKey(d){ if(pinBuffer.length>=4) return; pinBuffer+=d; updateDots(); if(pinBuffer.length===4) setTimeout(checkPin,120); }
+function pinBackspace(){ pinBuffer=pinBuffer.slice(0,-1); updateDots(); }
+function pinCancel(){ document.getElementById('pin-overlay').style.display='none'; pinBuffer=''; pinCallback=null; updateDots(); }
+function updateDots(){ for(let i=0;i<4;i++){ const d=document.getElementById('dot-'+i); if(d) d.className='pin-dot'+(i<pinBuffer.length?' filled':''); } }
+function checkPin(){ if(pinBuffer===pinExpected){ document.getElementById('pin-overlay').style.display='none'; pinBuffer=''; updateDots(); const cb=pinCallback; pinCallback=null; if(cb) cb(); } else { for(let i=0;i<4;i++){ const d=document.getElementById('dot-'+i); if(d){ d.style.background='#c0392b'; d.style.borderColor='#c0392b'; } } setTimeout(()=>{ pinBuffer=''; updateDots(); for(let i=0;i<4;i++){ const d=document.getElementById('dot-'+i); if(d){ d.style.background=''; d.style.borderColor=''; } } },500); } }
+
+/* =========================================================
+   INLINE CELL EDITOR - tap a log cell to change just that field
+   ========================================================= */
+function fieldOptionsFor(key){
+  const s = STEPS.find(x=>x.key===key);
+  if(s && s.options) return s.options;
+  return null;
+}
+function fieldLabelFor(key){
+  const s = STEPS.find(x=>x.key===key);
+  if(s) return s.label;
+  const col = LOG_COLUMNS.find(([h,k])=>k===key);
+  return col ? col[0] : key;
+}
+// Big, full-screen-ish notes editor so long notes are readable without scrolling.
+// onSave(text) is called with the trimmed value when the user saves.
+function openNotesEditor(title, subtitle, current, onSave){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:660;background:rgba(10,14,40,0.92);display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:14px;max-width:640px;width:100%;height:80vh;max-height:80vh;padding:20px;display:flex;flex-direction:column;">
+    ${subtitle?`<div style="font-size:12px;color:var(--text-dim);margin-bottom:2px;">${escapeHtml(subtitle)}</div>`:''}
+    <h2 style="margin:0 0 12px;font-size:17px;">${escapeHtml(title||'Notes')}</h2>
+    <textarea id="ne-input" style="flex:1;width:100%;padding:14px;border:1px solid var(--line);border-radius:8px;font-size:16px;line-height:1.5;resize:none;font-family:inherit;">${escapeHtml(current||'')}</textarea>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-outline" id="ne-cancel">Cancel</button>
+      <button class="btn btn-primary" id="ne-save">Save Notes</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector('#ne-input');
+  inp.focus();
+  // put cursor at end
+  try{ inp.setSelectionRange(inp.value.length, inp.value.length); }catch(e){}
+  ov.querySelector('#ne-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#ne-save').onclick=()=>{ onSave((inp.value||'').trim()); ov.remove(); };
+}
+function openCellEditor(id, key){
+  const r = records.find(x=>x._id===id);
+  if(!r) return;
+  // Permission: status is a general field; other fields map to their scope
+  const scope = (key==='__status') ? 'general' : recordFieldScope(key);
+  if(!can(scope)){ permDenied(); return; }
+  // Status is normally derived (Repair Made + photo). Allow a manual override.
+  if(key==='__status'){
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+    const curState=isComplete(r);
+    ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:380px;width:100%;padding:20px;">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;">${escapeHtml(r.damperId||'')}</div>
+      <h2 style="margin:0 0 4px;font-size:16px;">Status</h2>
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Normally set by Repair Made + a photo. You can override it here.</p>
+      <div class="btn-row" style="flex-direction:column;">
+        <button class="btn ${curState?'':'btn-outline'}" data-s="complete">Complete</button>
+        <button class="btn ${!curState?'':'btn-outline'}" data-s="incomplete">Incomplete</button>
+        <button class="btn btn-outline" data-s="auto" style="margin-top:6px;">Use automatic (Repair Made + photo)</button>
+        <button class="btn btn-outline" data-s="cancel">Cancel</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click',e=>{
+      const b=e.target.closest('[data-s]'); if(!b) return;
+      const s=b.dataset.s;
+      if(s!=='cancel'){
+        if(s==='complete') r.statusOverride='complete';
+        else if(s==='incomplete') r.statusOverride='incomplete';
+        else delete r.statusOverride; // auto
+        saveLocal(); fbSave(r);
+        renderLog(); renderDashboard();
+        showToast('Status updated');
+      }
+      ov.remove();
+    });
+    return;
+  }
+  const label = fieldLabelFor(key);
+  const options = fieldOptionsFor(key);
+  const cur = r[key]||'';
+  // Notes get the big editor
+  if(key==='notes'){
+    openNotesEditor('Notes', r.damperId||'', cur, (val)=>{
+      r.notes=val; r.importComplete=isComplete(r); saveLocal(); fbSave(r); renderLog(); renderDashboard(); showToast('Notes updated');
+    });
+    return;
+  }
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  let inputHtml;
+  if(options){
+    inputHtml = `<select id="ce-input" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">
+      <option value="">(blank)</option>
+      ${options.map(o=>`<option ${o===cur?'selected':''}>${escapeHtml(o)}</option>`).join('')}
+    </select>`;
+  } else if(key==='notes'){
+    inputHtml = `<textarea id="ce-input" rows="4" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">${escapeHtml(cur)}</textarea>`;
+  } else if(key==='dateTested'){
+    inputHtml = `<input type="date" id="ce-input" value="${escapeHtml(cur)}" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">`;
+  } else {
+    inputHtml = `<input type="text" id="ce-input" value="${escapeHtml(cur)}" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">`;
+  }
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:380px;width:100%;padding:20px;">
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;">${escapeHtml(r.damperId||'')}</div>
+    <h2 style="margin:0 0 12px;font-size:16px;">${escapeHtml(label)}</h2>
+    ${inputHtml}
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-outline" id="ce-cancel">Cancel</button>
+      <button class="btn" id="ce-save">Save</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector('#ce-input'); if(inp && inp.focus) inp.focus();
+  ov.querySelector('#ce-cancel').addEventListener('click',()=>ov.remove());
+  ov.querySelector('#ce-save').addEventListener('click',()=>{
+    const val=(ov.querySelector('#ce-input').value||'').trim();
+    r[key]=val;
+    r.importComplete=isComplete(r);
+    saveLocal(); fbSave(r);
+    ov.remove();
+    renderLog(); renderDashboard();
+    showToast(`${label} updated`);
+  });
+}
+
+/* =========================================================
+   MAP MODULE - repairs has its OWN map, stored separately from
+   the main site's (Firestore doc + IndexedDB key use "_repairs").
+   Labels come from unflattened FreeText markups.
+   ========================================================= */
+let mapData=null, mapTiles=null, mapCurrentPage=0, mapZoom=1, mapJumpTarget=null;
+let mapTileEls=[], _cullScheduled=false, mapLogReturn=null;
+let MAP_RENDER_RES=12000;
+const MAP_RES_OPTIONS=[
+  {px:5000, label:'Standard (5k) - fast, light'},
+  {px:8000, label:'High (8k)'},
+  {px:12000,label:'Very High (12k)'},
+  {px:16000,label:'Maximum (16k) - slow, large'},
+];
+function mapKey(){ return (currentHospitalId||'unknown') + '_repairs'; }
+function baseDamperName(s){ return String(s||'').replace(/\s*-\s*Round\s*\d+\s*$/i,'').trim(); }
+
+function mapDbOpen(){ return new Promise((res,rej)=>{ const rq=indexedDB.open('repairs_maps',1); rq.onupgradeneeded=()=>rq.result.createObjectStore('maps'); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); }); }
+async function mapDbGet(key){ const dbi=await mapDbOpen(); return new Promise((res,rej)=>{ const tx=dbi.transaction('maps','readonly'); const rq=tx.objectStore('maps').get(key); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error); }); }
+async function mapDbPut(key,val){ const dbi=await mapDbOpen(); return new Promise((res,rej)=>{ const tx=dbi.transaction('maps','readwrite'); tx.objectStore('maps').put(val,key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+
+function promptResolution(){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.92);display:flex;align-items:center;justify-content:center;padding:20px;';
+    const card=document.createElement('div');
+    card.style.cssText='background:var(--panel);border-radius:12px;max-width:420px;width:100%;padding:20px;';
+    card.innerHTML=`<h2 style="margin:0 0 6px;">Choose Map Quality</h2>
+      <p style="font-size:13px;color:var(--text-dim);margin:0 0 16px;">Higher is sharper when zoomed but slower. <b>12k recommended.</b> 16k can crash on some phones.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${MAP_RES_OPTIONS.map(o=>`<button class="btn ${o.px===12000?'':'btn-outline'}" data-res="${o.px}" style="text-align:left;margin:0;">${o.label}${o.px===12000?'  \u2713 Recommended':''}</button>`).join('')}
+      </div>
+      <button class="btn btn-outline" data-res="cancel" style="margin-top:14px;">Cancel</button>`;
+    ov.appendChild(card); document.body.appendChild(ov);
+    card.addEventListener('click',e=>{ const b=e.target.closest('[data-res]'); if(!b) return; const v=b.dataset.res; ov.remove(); resolve(v==='cancel'?null:parseInt(v)); });
+  });
+}
+
+async function renderPageTiles(page, baseViewport, onProgress){
+  const TARGET_LONG=MAP_RENDER_RES;
+  const longEdge=Math.max(baseViewport.width, baseViewport.height);
+  const scale=Math.min(TARGET_LONG/longEdge, 8);
+  const vp=page.getViewport({scale});
+  const fullW=Math.ceil(vp.width), fullH=Math.ceil(vp.height);
+  const TILE=1024;
+  const cols=Math.ceil(fullW/TILE), rows=Math.ceil(fullH/TILE);
+  const total=cols*rows, data=new Array(total);
+  let done=0;
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const tx=c*TILE, ty=r*TILE;
+      const tw=Math.min(TILE,fullW-tx), th=Math.min(TILE,fullH-ty);
+      const tile=document.createElement('canvas'); tile.width=tw; tile.height=th;
+      const tctx=tile.getContext('2d'); tctx.fillStyle='#ffffff'; tctx.fillRect(0,0,tw,th);
+      const tvp=page.getViewport({scale, offsetX:-tx, offsetY:-ty});
+      await page.render({canvasContext:tctx, viewport:tvp, background:'#ffffff'}).promise;
+      data[r*cols+c]=tile.toDataURL('image/jpeg',0.85);
+      tile.width=tile.height=0;
+      done++; if(onProgress) onProgress(`rendering tile ${done}/${total}`);
+      await new Promise(res=>setTimeout(res,0));
+    }
+  }
+  return {cols,rows,tile:TILE,fullW,fullH,data};
+}
+
+async function handleMapUpload(event){
+  if(!canGeneral()){ permDenied(); try{event.target.value='';}catch(e){} return; }
+  const file=event.target.files&&event.target.files[0];
+  if(!file) return;
+  const chosen=await promptResolution();
+  if(chosen===null){ try{event.target.value='';}catch(e){} return; }
+  MAP_RENDER_RES=chosen;
+  let banner=document.getElementById('map-progress-banner');
+  if(!banner){ banner=document.createElement('div'); banner.id='map-progress-banner'; banner.style.cssText='position:fixed;top:0;left:0;right:0;z-index:400;background:var(--navy);color:#fff;padding:12px 16px;font-size:13px;text-align:center;font-weight:600;'; document.body.appendChild(banner); }
+  const setProg=m=>{ banner.textContent=m; };
+  const fail=m=>{ banner.style.background='var(--red)'; setProg(m); setTimeout(()=>banner.remove(),7000); };
+  setProg('Starting...');
+  if(!currentHospitalId){ fail('Still connecting to cloud - try again in a few seconds'); return; }
+  if(typeof pdfjsLib==='undefined'){ fail('PDF library not loaded'); return; }
+  try{
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    const buf=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    setProg(`PDF loaded: ${pdf.numPages} pages. Reading damper markups...`);
+    const pages=[];
+    for(let pno=1;pno<=pdf.numPages;pno++){
+      const page=await pdf.getPage(pno);
+      const viewport=page.getViewport({scale:1});
+      const annots=await page.getAnnotations({intent:'display'});
+      const labels=[];
+      annots.forEach(a=>{
+        const raw=((a.contents)||(a.contentsObj&&a.contentsObj.str)||'').trim();
+        if(!raw) return;
+        const txt=raw.replace(/\s+/g,'').toUpperCase();
+        if(txt.length<3||txt.length>40) return;
+        const r=a.rect; if(!r||r.length<4) return;
+        const cx=(r[0]+r[2])/2, cy=(r[1]+r[3])/2;
+        const pt=viewport.convertToViewportPoint(cx,cy);
+        labels.push({t:txt, x:+(pt[0]/viewport.width).toFixed(4), y:+(pt[1]/viewport.height).toFixed(4)});
+      });
+      if(labels.length) pages.push({page:pno, labels, _pageObj:page, _viewport:viewport});
+    }
+    if(!pages.length){ fail('No damper markups found (needs unflattened FreeText labels)'); return; }
+    const indexPages=pages.map(p=>({page:p.page, labels:p.labels}));
+    if(firebaseReady){
+      setProg('Saving damper labels to cloud...');
+      try{ await db.collection('maps').doc(mapKey()).set({pages:indexPages, fileName:file.name||'map.pdf', resolution:MAP_RENDER_RES, updatedAt:Date.now()}); }catch(e){ console.error(e); }
+    }
+    let existing=null; try{ existing=await mapDbGet(mapKey()); }catch(e){}
+    const tilesByPage=(existing&&existing.tiles)?existing.tiles:{};
+    for(const p of pages){
+      setProg(`Page ${p.page}: rendering (${MAP_RENDER_RES}px)...`);
+      try{
+        tilesByPage[p.page]=await renderPageTiles(p._pageObj, p._viewport, m=>setProg(`Page ${p.page}: ${m}`));
+        await mapDbPut(mapKey(), {tiles:tilesByPage, fileName:file.name||'map.pdf', resolution:MAP_RENDER_RES, updatedAt:Date.now()});
+      }catch(err){
+        fail(`Labels saved, but drawing failed on page ${p.page} (try lower quality). ${err.message||err}`);
+        mapData=null; mapTiles=null;
+        return;
+      }
+    }
+    banner.style.background='var(--navy)';
+    setProg(`\u2713 Map saved: ${pages.length} page(s), ${indexPages.reduce((s,p)=>s+p.labels.length,0)} labels @ ${MAP_RENDER_RES}px`);
+    setTimeout(()=>banner.remove(),4000);
+    try{event.target.value='';}catch(e){}
+    mapData=null; mapTiles=null;
+    renderMap(); renderLog();
+  }catch(e){ console.error(e); fail('Map failed: '+(e.message||e)); }
+}
+
+async function loadMapData(){
+  mapData=null; mapTiles=null;
+  if(!currentHospitalId) return;
+  if(firebaseReady){
+    try{ const doc=await db.collection('maps').doc(mapKey()).get(); if(doc.exists) mapData={hospitalId:currentHospitalId, ...doc.data()}; }catch(e){ console.error(e); }
+  }
+  try{
+    const local=await mapDbGet(mapKey());
+    if(local&&local.tiles){
+      mapTiles=local.tiles;
+      if(!mapData) mapData={hospitalId:currentHospitalId, pages:Object.keys(mapTiles).map(n=>({page:+n,labels:[]})), fileName:local.fileName, resolution:local.resolution};
+      if(mapData&&!mapData.resolution&&local.resolution) mapData.resolution=local.resolution;
+    }
+  }catch(e){ console.error(e); }
+}
+
+async function renderMap(){
+  const noFile=document.getElementById('map-no-file');
+  const content=document.getElementById('map-content');
+  if(!mapData || mapData.hospitalId!==currentHospitalId || mapTiles===null){
+    await loadMapData();
+  }
+  if(!mapData || !mapData.pages || !mapData.pages.length){
+    noFile.style.display='block'; content.style.display='none'; return;
+  }
+  noFile.style.display='none'; content.style.display='block';
+  const sel=document.getElementById('map-page-select');
+  sel.innerHTML=mapData.pages.map((p,i)=>`<option value="${i}">Page ${p.page} (${p.labels.length} labels)</option>`).join('');
+  if(mapCurrentPage>=mapData.pages.length) mapCurrentPage=0;
+  sel.value=mapCurrentPage;
+  sel.onchange=()=>{ mapCurrentPage=parseInt(sel.value); mapZoom=1; drawMapPage(); };
+  drawMapPage();
+}
+function drawMapPage(){
+  const page=mapData.pages[mapCurrentPage];
+  if(!page) return;
+  const markers=document.getElementById('map-markers');
+  const wrap=document.getElementById('map-canvas-wrap');
+  const tileSet=mapTiles&&mapTiles[page.page];
+  const old=document.getElementById('map-tile-layer'); if(old) old.remove();
+  if(!tileSet){
+    markers.innerHTML='';
+    updateCoverage('Labels synced from cloud. Load the PDF on this device to see the drawing.');
+    return;
+  }
+  const layer=document.createElement('div');
+  layer.id='map-tile-layer'; layer.style.cssText='position:absolute;inset:0;';
+  wrap.dataset.aspect=(tileSet.fullH/tileSet.fullW);
+  mapTileEls=[];
+  for(let r=0;r<tileSet.rows;r++){
+    for(let c=0;c<tileSet.cols;c++){
+      const url=tileSet.data[r*tileSet.cols+c];
+      if(!url) continue;
+      const leftPct=(c*tileSet.tile)/tileSet.fullW*100, topPct=(r*tileSet.tile)/tileSet.fullH*100;
+      const wPct=Math.min(tileSet.tile,tileSet.fullW-c*tileSet.tile)/tileSet.fullW*100;
+      const hPct=Math.min(tileSet.tile,tileSet.fullH-r*tileSet.tile)/tileSet.fullH*100;
+      const t=document.createElement('img');
+      t.style.cssText=`position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;display:block;background:#fff;`;
+      t.draggable=false;
+      t._tileUrl=url; t._geo={left:leftPct/100, top:topPct/100, w:wPct/100, h:hPct/100}; t._loaded=false;
+      layer.appendChild(t); mapTileEls.push(t);
+    }
+  }
+  wrap.insertBefore(layer, markers);
+  buildMarkers(page, markers, wrap);
+  applyMapZoom();
+  doJump(page, markers, wrap);
+  updateVisibleTiles();
+  const testedSet=new Set(scopedRecords().map(r=>normDamperId(baseDamperName(r.damperId))));
+  const tested=page.labels.filter(l=>testedSet.has(normDamperId(l.t))).length;
+  const res=mapData.resolution?` Quality: ${mapData.resolution>=1000?(mapData.resolution/1000)+'k':mapData.resolution}px.`:'';
+  const editHint = canGeneral() ? ' Right-click (or long-press) a tag to move or delete it.' : '';
+  updateCoverage(`This page: ${tested}/${page.labels.length} dampers have forms. Tap a damper: with a form opens it, without starts one.${editHint}${res}`);
+}
+function updateCoverage(msg){ const el=document.getElementById('map-coverage-summary'); if(el) el.textContent=msg; }
+function buildMarkers(page, markers, wrap){
+  markers.innerHTML='';
+  const byBase={};
+  scopedRecords().forEach(r=>{ const b=normDamperId(baseDamperName(r.damperId)); (byBase[b]=byBase[b]||[]).push(r); });
+  page.labels.forEach(lbl=>{
+    const n=normDamperId(lbl.t);
+    const recs=byBase[n]||[];
+    const m=document.createElement('div');
+    m.className='map-tag-marker';
+    m.style.cssText=`position:absolute;left:${lbl.x*100}%;top:${lbl.y*100}%;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;pointer-events:auto;cursor:pointer;background:transparent;`;
+    m.title=lbl.t;
+    let lpFired=false;
+    m.addEventListener('click',(e)=>{
+      if(lpFired){ lpFired=false; e.preventDefault(); e.stopPropagation(); return; }
+      if(recs.length){
+        const plain=recs.find(r=>normDamperId(r.damperId)===n)||recs[0];
+        openReport(plain);
+      } else {
+        promptBeginForm(lbl.t);
+      }
+    });
+    // Right-click -> Move/Delete menu (Arctic only)
+    m.addEventListener('contextmenu',(e)=>{ e.preventDefault(); e.stopPropagation(); openTagMenu(lbl, e.clientX, e.clientY); });
+    // Long-press for touch devices (iOS Safari)
+    let lpTimer=null, lpStart=null, lpMoved=false;
+    m.addEventListener('touchstart',(e)=>{
+      if(e.touches.length!==1) return;
+      const t=e.touches[0]; lpStart={x:t.clientX,y:t.clientY}; lpMoved=false;
+      lpTimer=setTimeout(()=>{ if(!lpMoved){ lpFired=true; if(navigator.vibrate) navigator.vibrate(20); openTagMenu(lbl, lpStart.x, lpStart.y); } }, 550);
+    },{passive:true});
+    m.addEventListener('touchmove',(e)=>{ if(lpStart&&e.touches.length===1){ const t=e.touches[0]; if(Math.abs(t.clientX-lpStart.x)>8||Math.abs(t.clientY-lpStart.y)>8){ lpMoved=true; clearTimeout(lpTimer); } } },{passive:true});
+    m.addEventListener('touchend',()=>{ clearTimeout(lpTimer); });
+    markers.appendChild(m);
+  });
+}
+function promptBeginForm(name){
+  if(!canGeneral()){ permDenied(); return; }
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:360px;width:100%;padding:22px;text-align:center;">
+    <h2 style="margin:0 0 16px;font-size:16px;">Begin form for ${escapeHtml(name)}?</h2>
+    <div class="btn-row"><button class="btn btn-outline" data-a="no">No</button><button class="btn" data-a="yes">Yes</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{
+    const b=e.target.closest('[data-a]'); if(!b) return;
+    ov.remove();
+    if(b.dataset.a==='yes'){
+      wizard={ data:{ damperId:name, dateTested:todayStr(), hospitalId:currentHospitalId, subFolder:REPAIR_BUILDING }, step:1, editingId:null };
+      switchView('inspect'); renderStep();
+    }
+  });
+}
+function doJump(page, markers, wrap){
+  if(!mapJumpTarget) return;
+  const target=page.labels.find(l=>normDamperId(l.t)===normDamperId(baseDamperName(mapJumpTarget)));
+  if(target){
+    mapZoom=Math.max(mapZoom,4);
+    applyMapZoom();
+    requestAnimationFrame(()=>{
+      const vp=document.getElementById('map-viewport');
+      const wrapW=wrap.offsetWidth, wrapH=wrap.offsetHeight;
+      vp.scrollLeft=target.x*wrapW-vp.clientWidth/2;
+      vp.scrollTop=target.y*wrapH-vp.clientHeight/2;
+      updateVisibleTiles();
+    });
+    const pulse=document.createElement('div');
+    pulse.style.cssText=`position:absolute;left:${target.x*100}%;top:${target.y*100}%;width:40px;height:40px;margin:-20px 0 0 -20px;border:3px solid var(--gold);border-radius:50%;pointer-events:none;z-index:5;`;
+    markers.appendChild(pulse);
+    setTimeout(()=>pulse.remove(),3000);
+  }
+  mapJumpTarget=null;
+}
+function applyMapZoom(_retry){
+  const wrap=document.getElementById('map-canvas-wrap');
+  const vp=document.getElementById('map-viewport');
+  if(!wrap||!vp) return;
+  const baseW=vp.clientWidth;
+  if(!baseW){ const n=(_retry||0); if(n<30) requestAnimationFrame(()=>applyMapZoom(n+1)); return; }
+  const w=baseW*mapZoom;
+  wrap.style.width=w+'px';
+  const aspect=parseFloat(wrap.dataset.aspect||'0');
+  if(aspect>0) wrap.style.height=(w*aspect)+'px';
+  scheduleCull();
+}
+function scheduleCull(){ if(_cullScheduled) return; _cullScheduled=true; requestAnimationFrame(()=>{ _cullScheduled=false; updateVisibleTiles(); }); }
+function updateVisibleTiles(){
+  const wrap=document.getElementById('map-canvas-wrap');
+  const vp=document.getElementById('map-viewport');
+  if(!wrap||!vp||!mapTileEls.length) return;
+  const wrapW=wrap.offsetWidth, wrapH=wrap.offsetHeight;
+  if(!wrapW||!wrapH) return;
+  const mx=vp.clientWidth, my=vp.clientHeight;
+  const x0=(vp.scrollLeft-mx)/wrapW, x1=(vp.scrollLeft+vp.clientWidth+mx)/wrapW;
+  const y0=(vp.scrollTop-my)/wrapH, y1=(vp.scrollTop+vp.clientHeight+my)/wrapH;
+  for(const t of mapTileEls){
+    const g=t._geo;
+    const vis=(g.left+g.w>=x0)&&(g.left<=x1)&&(g.top+g.h>=y0)&&(g.top<=y1);
+    if(vis&&!t._loaded){ t.src=t._tileUrl; t._loaded=true; }
+    else if(!vis&&t._loaded){ t.removeAttribute('src'); t._loaded=false; }
+  }
+}
+async function jumpToMap(damperId){
+  if(!mapData || mapData.hospitalId!==currentHospitalId){ await loadMapData(); }
+  if(!mapData || !mapData.pages || !mapData.pages.length){ showToast('No map loaded yet - upload one on the Map tab'); return; }
+  const base=baseDamperName(damperId);
+  const pageIdx=mapData.pages.findIndex(p=>p.labels.some(l=>normDamperId(l.t)===normDamperId(base)));
+  if(pageIdx<0){ showToast(`No location found on map for ${damperId}`); return; }
+  const logView=document.getElementById('view-log');
+  if(logView&&logView.classList.contains('active')){
+    const wrapEl=document.querySelector('.log-table-wrap');
+    mapLogReturn={pageY:window.scrollY, wrapTop:wrapEl?wrapEl.scrollTop:0, wrapLeft:wrapEl?wrapEl.scrollLeft:0};
+  }
+  mapJumpTarget=damperId;
+  mapCurrentPage=pageIdx;
+  switchView('map');
+  showBackToLog();
+}
+function showBackToLog(){
+  if(!mapLogReturn) return;
+  let btn=document.getElementById('map-back-log-btn');
+  if(btn) return;
+  btn=document.createElement('button');
+  btn.id='map-back-log-btn';
+  btn.textContent='\u2190 Back to Log';
+  btn.style.cssText='position:fixed;bottom:20px;left:16px;z-index:300;background:var(--navy);color:#fff;border:none;border-radius:8px;padding:12px 18px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+  btn.addEventListener('click',()=>{
+    const ret=mapLogReturn; mapLogReturn=null; btn.remove();
+    switchView('log');
+    requestAnimationFrame(()=>{
+      window.scrollTo(0, ret.pageY||0);
+      const wrapEl=document.querySelector('.log-table-wrap');
+      if(wrapEl){ wrapEl.scrollTop=ret.wrapTop||0; wrapEl.scrollLeft=ret.wrapLeft||0; }
+    });
+  });
+  document.body.appendChild(btn);
+}
+/* ---- Assign a not-on-map damper a spot on the drawing (laptop flow) ---- */
+let placementMode=null;
+function startMapPlacement(recId){
+  if(!canGeneral()){ permDenied(); return; }
+  const r=records.find(x=>x._id===recId);
+  if(!r) return;
+  if(!mapData || !mapData.pages || !mapData.pages.length){
+    showToast('Load the map first (Map tab) before placing dampers');
+    return;
+  }
+  placementMode={ recId, damperName: baseDamperName(r.damperId) };
+  switchView('map');
+  let pb=document.getElementById('placement-banner');
+  if(!pb){
+    pb=document.createElement('div');
+    pb.id='placement-banner';
+    pb.style.cssText='position:fixed;top:0;left:0;right:0;z-index:450;background:var(--gold);color:#1a1a1a;padding:12px 16px;font-size:14px;text-align:center;font-weight:700;';
+    document.body.appendChild(pb);
+  }
+  pb.innerHTML=`Click the spot on the drawing for <b>${escapeHtml(placementMode.damperName)}</b> &nbsp; <button id="placement-cancel" style="margin-left:10px;padding:4px 10px;border:none;border-radius:5px;background:#1a1a1a;color:#fff;cursor:pointer;">Cancel</button>`;
+  document.getElementById('placement-cancel').onclick=cancelPlacement;
+}
+function cancelPlacement(){
+  placementMode=null;
+  const pb=document.getElementById('placement-banner'); if(pb) pb.remove();
+}
+async function saveMapLabels(){
+  if(!firebaseReady) return;
+  try{
+    await db.collection('maps').doc(mapKey()).set({
+      pages: mapData.pages.map(p=>({page:p.page, labels:p.labels.map(l=>({t:l.t,x:l.x,y:l.y}))})),
+      fileName: mapData.fileName||'map.pdf',
+      resolution: mapData.resolution||MAP_RENDER_RES,
+      updatedAt: Date.now()
+    }, {merge:true});
+  }catch(e){ console.error('map save',e); showToast('Save failed — check connection'); }
+}
+async function finalizePlacement(xFrac, yFrac){
+  if(!placementMode) return;
+  const x=+xFrac.toFixed(4), y=+yFrac.toFixed(4);
+  if(placementMode.movingLabel){
+    // Move this exact tag object to the new location
+    const lbl=placementMode.movingLabel;
+    lbl.x=x; lbl.y=y;
+    // ensure it's on the current page's labels array
+    const page=mapData.pages[mapCurrentPage];
+    if(page.labels.indexOf(lbl)<0) page.labels.push(lbl);
+    await saveMapLabels();
+    const name=lbl.t;
+    cancelPlacement();
+    drawMapPage();
+    showToast(`Tag "${name}" moved ✓`);
+    return;
+  }
+  const norm=normDamperId(placementMode.damperName);
+  // Remove any existing placement for this damper (on any page) so "Set Location"
+  // moves it rather than duplicating.
+  mapData.pages.forEach(p=>{ p.labels=p.labels.filter(l=>normDamperId(l.t)!==norm); });
+  const pageObj=mapData.pages[mapCurrentPage];
+  pageObj.labels.push({ t: norm, x, y });
+  await saveMapLabels();
+  const name=placementMode.damperName;
+  cancelPlacement();
+  drawMapPage();
+  renderLog();
+  showToast(`${name} location set ✓`);
+}
+// Right-click / long-press a map tag -> menu to Move or Delete that specific tag
+function openTagMenu(lbl, clientX, clientY){
+  if(!canGeneral()){ permDenied(); return; }
+  // close any existing menu
+  const old=document.getElementById('tag-menu'); if(old) old.remove();
+  const menu=document.createElement('div');
+  menu.id='tag-menu';
+  menu.style.cssText=`position:fixed;z-index:800;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.3);overflow:hidden;min-width:150px;`;
+  menu.innerHTML=`<div style="padding:8px 12px;font-size:12px;font-weight:700;color:var(--navy);border-bottom:1px solid var(--line);background:var(--panel2);">${escapeHtml(lbl.t)}</div>
+    <button class="tag-menu-btn" data-a="move" style="display:block;width:100%;text-align:left;padding:11px 14px;border:none;background:none;font-size:14px;cursor:pointer;">↔ Move tag</button>
+    <button class="tag-menu-btn" data-a="delete" style="display:block;width:100%;text-align:left;padding:11px 14px;border:none;background:none;font-size:14px;cursor:pointer;color:var(--red);">🗑 Delete tag</button>`;
+  document.body.appendChild(menu);
+  // position on screen, keeping it within the viewport
+  const mw=menu.offsetWidth, mh=menu.offsetHeight;
+  let x=clientX, y=clientY;
+  if(x+mw>window.innerWidth-8) x=window.innerWidth-mw-8;
+  if(y+mh>window.innerHeight-8) y=window.innerHeight-mh-8;
+  menu.style.left=x+'px'; menu.style.top=y+'px';
+  const close=()=>{ menu.remove(); document.removeEventListener('click',onDoc,true); document.removeEventListener('contextmenu',onDoc,true); };
+  const onDoc=(ev)=>{ if(!menu.contains(ev.target)){ close(); } };
+  setTimeout(()=>{ document.addEventListener('click',onDoc,true); document.addEventListener('contextmenu',onDoc,true); },0);
+  menu.addEventListener('click',(ev)=>{
+    const b=ev.target.closest('.tag-menu-btn'); if(!b) return;
+    ev.stopPropagation();
+    const a=b.dataset.a; close();
+    if(a==='delete') deleteTag(lbl);
+    else if(a==='move') startTagMove(lbl);
+  });
+}
+async function deleteTag(lbl){
+  if(!canGeneral()){ permDenied(); return; }
+  if(!confirm(`Remove the map tag "${lbl.t}"?\n\n(This only removes it from the drawing — the form/record stays in the log.)`)) return;
+  const page=mapData.pages[mapCurrentPage];
+  // remove this exact label object (fall back to first matching name+coords)
+  const idx=page.labels.indexOf(lbl);
+  if(idx>=0) page.labels.splice(idx,1);
+  else { const j=page.labels.findIndex(l=>normDamperId(l.t)===normDamperId(lbl.t) && l.x===lbl.x && l.y===lbl.y); if(j>=0) page.labels.splice(j,1); }
+  await saveMapLabels();
+  drawMapPage();
+  renderLog();
+  showToast(`Tag "${lbl.t}" removed`);
+}
+// Move a specific existing tag: enter placement mode tied to this label
+function startTagMove(lbl){
+  if(!canGeneral()){ permDenied(); return; }
+  placementMode={ recId:null, damperName: lbl.t, movingLabel: lbl };
+  let pb=document.getElementById('placement-banner');
+  if(!pb){
+    pb=document.createElement('div');
+    pb.id='placement-banner';
+    pb.style.cssText='position:fixed;top:0;left:0;right:0;z-index:450;background:var(--gold);color:#1a1a1a;padding:12px 16px;font-size:14px;text-align:center;font-weight:700;';
+    document.body.appendChild(pb);
+  }
+  pb.innerHTML=`Tap the new spot for <b>${escapeHtml(lbl.t)}</b> &nbsp; <button id="placement-cancel" style="margin-left:10px;padding:4px 10px;border:none;border-radius:5px;background:#1a1a1a;color:#fff;cursor:pointer;">Cancel</button>`;
+  document.getElementById('placement-cancel').onclick=cancelPlacement;
+}
+
+function initMapControls(){
+  const zin=document.getElementById('map-zoom-in');
+  const zout=document.getElementById('map-zoom-out');
+  const zreset=document.getElementById('map-zoom-reset');
+  if(zin) zin.addEventListener('click',()=>{ mapZoom=Math.min(mapZoom*1.4,20); applyMapZoom(); });
+  if(zout) zout.addEventListener('click',()=>{ mapZoom=Math.max(mapZoom/1.4,1); applyMapZoom(); });
+  if(zreset) zreset.addEventListener('click',()=>{ mapZoom=1; applyMapZoom(); });
+  ['map-empty-upload-input','map-replace-input'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('change',handleMapUpload);
+  });
+  const vp=document.getElementById('map-viewport');
+  if(vp){
+    let dragging=false,startX=0,startY=0,startL=0,startT=0,moved=false;
+    const down=(cx,cy)=>{ dragging=true; moved=false; startX=cx; startY=cy; startL=vp.scrollLeft; startT=vp.scrollTop; vp.style.cursor='grabbing'; };
+    const move=(cx,cy)=>{ if(!dragging) return; const dx=cx-startX, dy=cy-startY; if(Math.abs(dx)>3||Math.abs(dy)>3) moved=true; vp.scrollLeft=startL-dx; vp.scrollTop=startT-dy; };
+    const up=()=>{ dragging=false; vp.style.cursor='grab'; };
+    vp.style.cursor='grab';
+    vp.addEventListener('mousedown',e=>down(e.clientX,e.clientY));
+    window.addEventListener('mousemove',e=>{ if(dragging){ e.preventDefault(); move(e.clientX,e.clientY); } });
+    window.addEventListener('mouseup',up);
+    vp.addEventListener('click',e=>{
+      if(moved){ e.stopPropagation(); e.preventDefault(); return; }
+      // Placement mode: clicking sets the damper's location
+      if(placementMode){
+        e.stopPropagation(); e.preventDefault();
+        const wrap=document.getElementById('map-canvas-wrap');
+        if(!wrap||!wrap.offsetWidth) return;
+        const rect=wrap.getBoundingClientRect();
+        const xFrac=(e.clientX-rect.left)/wrap.offsetWidth;
+        const yFrac=(e.clientY-rect.top)/wrap.offsetHeight;
+        if(xFrac<0||xFrac>1||yFrac<0||yFrac>1) return;
+        finalizePlacement(xFrac,yFrac);
+      }
+    },true);
+    vp.addEventListener('touchstart',e=>{ if(e.touches.length===1) down(e.touches[0].clientX,e.touches[0].clientY); },{passive:true});
+    vp.addEventListener('touchmove',e=>{ if(dragging&&e.touches.length===1) move(e.touches[0].clientX,e.touches[0].clientY); },{passive:true});
+    vp.addEventListener('touchend',up);
+    vp.addEventListener('scroll',scheduleCull,{passive:true});
+    vp.addEventListener('wheel',e=>{
+      e.preventDefault();
+      const wrap=document.getElementById('map-canvas-wrap');
+      if(!wrap) return;
+      const rect=vp.getBoundingClientRect();
+      const cx=vp.scrollLeft+(e.clientX-rect.left), cy=vp.scrollTop+(e.clientY-rect.top);
+      const pw=wrap.offsetWidth, ph=wrap.offsetHeight;
+      const fx=pw?cx/pw:0.5, fy=ph?cy/ph:0.5;
+      const factor=e.deltaY<0?1.15:1/1.15;
+      mapZoom=Math.min(Math.max(mapZoom*factor,1),20);
+      applyMapZoom();
+      const nw=wrap.offsetWidth, nh=wrap.offsetHeight;
+      vp.scrollLeft=fx*nw-(e.clientX-rect.left);
+      vp.scrollTop=fy*nh-(e.clientY-rect.top);
+    },{passive:false});
+  }
+  const mapView=document.getElementById('view-map');
+  if(mapView){
+    let depth=0, hint=null;
+    const show=()=>{ if(hint) return; hint=document.createElement('div'); hint.textContent='Drop PDF to upload map'; hint.style.cssText='position:fixed;inset:0;z-index:500;background:rgba(26,35,126,0.85);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;pointer-events:none;'; document.body.appendChild(hint); };
+    const hide=()=>{ if(hint){ hint.remove(); hint=null; } };
+    const hasFiles=e=>e.dataTransfer&&Array.from(e.dataTransfer.types||[]).includes('Files');
+    mapView.addEventListener('dragenter',e=>{ if(!hasFiles(e))return; e.preventDefault(); depth++; show(); });
+    mapView.addEventListener('dragover',e=>{ if(!hasFiles(e))return; e.preventDefault(); });
+    mapView.addEventListener('dragleave',e=>{ if(!hasFiles(e))return; depth--; if(depth<=0){ depth=0; hide(); } });
+    mapView.addEventListener('drop',e=>{
+      if(!hasFiles(e)) return;
+      e.preventDefault(); depth=0; hide();
+      const f=e.dataTransfer.files[0];
+      if(f&&f.type==='application/pdf') handleMapUpload({target:{files:[f]}});
+      else showToast('Drop a PDF file');
+    });
+  }
+}
+
+/* =========================================================
+   BAS NAME-CHANGE LIST  (synced via Firestore doc "bas/<hospitalId>")
+   Tracks dampers we renamed and whether the change was pushed to BAS.
+   ========================================================= */
+let basList = [];
+const BAS_STORAGE = 'fsd_repairs_bas_v1';
+const BAS_COLS = [
+  ["Other Alias's",'alias'],['Old Name','oldName'],['New Name','newName'],
+  ['LVL','lvl'],['Area','area'],['Type','type'],['Renamed in BAS?','bas'],['Notes','notes'],
+];
+function basLoadLocal(){ try{ return JSON.parse(localStorage.getItem(BAS_STORAGE))||[]; }catch(e){ return []; } }
+function basSaveLocal(){ try{ localStorage.setItem(BAS_STORAGE, JSON.stringify(basList)); }catch(e){} }
+function basDocId(){ return (currentHospitalId||'unknown'); }
+async function basSaveCloud(){
+  basSaveLocal();
+  if(!firebaseReady) return;
+  try{ await db.collection('bas').doc(basDocId()).set({ list: basList, updatedAt: Date.now() }); }
+  catch(e){ console.error('basSaveCloud',e); showToast('BAS save failed - check connection'); }
+}
+function basStartListener(){
+  if(!firebaseReady) return;
+  db.collection('bas').doc(basDocId()).onSnapshot(doc=>{
+    if(doc.exists && Array.isArray(doc.data().list)){
+      basList = doc.data().list;
+      basSaveLocal();
+      const v=document.getElementById('view-bas');
+      if(v && v.classList.contains('active')) renderBas();
+    }
+  }, e=>console.error('bas listener',e));
+}
+function basStatusNorm(v){
+  const s=(v||'').trim().toUpperCase();
+  if(s==='Y'||s==='YES') return 'Yes';
+  if(s==='N/A'||s==='NA') return 'N/A';
+  if(s==='N'||s==='NO') return 'No';
+  return 'No'; // blank defaults to No (not yet renamed)
+}
+// Auto-rule: any type other than E is N/A (not on the BAS system)
+function basEffectiveStatus(e){
+  const t=String(e.type||'').trim().toUpperCase();
+  if(t && t!=='E') return 'N/A';
+  return basStatusNorm(e.bas);
+}
+function clearBasFilters(){
+  ['bas-search','bas-filter','bas-type','bas-area','bas-lvl'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  renderBas();
+}
+function renderBas(){
+  const head=document.getElementById('bas-head');
+  const body=document.getElementById('bas-body');
+  const empty=document.getElementById('bas-empty');
+  const cnt=document.getElementById('bas-count');
+  // populate Type/Area/LVL filter options
+  const typeSel=document.getElementById('bas-type'), areaSel=document.getElementById('bas-area'), lvlSel=document.getElementById('bas-lvl');
+  const types=[...new Set(basList.map(e=>e.type).filter(v=>v!==''&&v!=null))].sort();
+  const areas=[...new Set(basList.map(e=>e.area).filter(v=>v!==''&&v!=null))].sort();
+  const lvls=[...new Set(basList.map(e=>e.lvl).filter(v=>v!==''&&v!=null))].sort();
+  const ct=typeSel.value, ca=areaSel.value, cl=lvlSel.value;
+  typeSel.innerHTML='<option value="">Type: All</option>'+types.map(t=>`<option ${t===ct?'selected':''}>${escapeHtml(String(t))}</option>`).join('');
+  areaSel.innerHTML='<option value="">Area: All</option>'+areas.map(a=>`<option ${a===ca?'selected':''}>${escapeHtml(String(a))}</option>`).join('');
+  lvlSel.innerHTML='<option value="">LVL: All</option>'+lvls.map(l=>`<option ${l===cl?'selected':''}>${escapeHtml(String(l))}</option>`).join('');
+  const q=(document.getElementById('bas-search').value||'').trim().toLowerCase();
+  const bf=document.getElementById('bas-filter').value;
+  const fT=typeSel.value, fA=areaSel.value, fL=lvlSel.value;
+  let rows=basList.map((e,i)=>({e,i}));
+  if(q) rows=rows.filter(({e})=>[e.alias,e.oldName,e.newName,e.lvl,e.area,e.type].some(v=>String(v||'').toLowerCase().includes(q)));
+  if(bf){
+    rows=rows.filter(({e})=> basEffectiveStatus(e)===bf);
+  }
+  if(fT) rows=rows.filter(({e})=>String(e.type)===fT);
+  if(fA) rows=rows.filter(({e})=>String(e.area)===fA);
+  if(fL) rows=rows.filter(({e})=>String(e.lvl)===fL);
+  const basHidden=getHidden(BAS_HIDDEN_KEY);
+  const visBasCols=BAS_COLS.filter(([h,k])=>!basHidden.includes(k));
+  head.innerHTML=visBasCols.map(([h,k],i)=>`<th${i===0?' class="sticky-col"':''} data-bcol="${k}" title="Tap to hide" style="cursor:pointer;white-space:nowrap;">${h} <span style="font-size:9px;font-weight:600;color:var(--navy);background:var(--panel2);border-radius:3px;padding:1px 4px;">hide</span></th>`).join('')+'<th>Actions</th>';
+  head.onclick=function(ev){ const th=ev.target.closest('th[data-bcol]'); if(th) basHideCol(th.dataset.bcol); };
+  if(cnt) cnt.textContent=`Showing ${rows.length} of ${basList.length} entries`;
+  // restore chips
+  const bhc=document.getElementById('bas-hidden-cols');
+  if(bhc){
+    if(basHidden.length){
+      const lf=k=>{ const c=BAS_COLS.find(([h,kk])=>kk===k); return c?c[0]:k; };
+      bhc.innerHTML=`<span style="font-size:11px;color:var(--text-dim);margin-right:4px;">Hidden (tap to show):</span>`+basHidden.map(k=>`<button class="bas-show-col" data-col="${k}" style="font-size:11px;border:1px solid var(--line);border-radius:12px;padding:3px 10px;margin:0 4px 4px 0;background:var(--panel);cursor:pointer;">+ ${escapeHtml(lf(k))}</button>`).join('');
+      bhc.querySelectorAll('.bas-show-col').forEach(b=>b.addEventListener('click',()=>basShowCol(b.dataset.col)));
+    } else bhc.innerHTML='';
+  }
+  if(!rows.length){ body.innerHTML=''; empty.style.display='block'; empty.innerHTML= basList.length?'No entries match.':'No BAS list yet. Import the Excel or add entries.'; return; }
+  empty.style.display='none';
+  body.innerHTML=rows.map(({e,i})=>{
+    const cells=visBasCols.map(([h,key],ci2)=>{
+      if(key==='bas'){
+        const eff=basEffectiveStatus(e);
+        const auto=(String(e.type||'').trim().toUpperCase()!=='E' && String(e.type||'').trim()!=='');
+        if(auto){
+          return `<td title="Auto N/A (type ${escapeHtml(String(e.type))} is not on BAS)"><span class="badge" style="background:#e5e7eb;color:#555;">N/A (auto)</span></td>`;
+        }
+        const canBas=can('basStatus');
+        return `<td><select class="bas-status" data-i="${i}" ${canBas?'':'disabled'} style="padding:5px 6px;border:1px solid var(--line);border-radius:5px;font-size:12px;font-weight:700;${canBas?'':'opacity:0.6;'}${eff==='Yes'?'color:var(--green);':eff==='N/A'?'color:#555;':'color:var(--red);'}">
+          <option value="Yes" ${eff==='Yes'?'selected':''}>Yes</option>
+          <option value="No" ${eff==='No'?'selected':''}>No</option>
+          <option value="N/A" ${eff==='N/A'?'selected':''}>N/A</option>
+        </select></td>`;
+      }
+      const editable=can(basFieldScope(key));
+      const mapBtn = (key==='oldName' && String(e.oldName||'').trim())
+        ? ` <button class="map-link-btn" data-mapname="${escapeHtml(e.oldName)}" title="Show on map" style="font-size:9px;font-weight:700;border:1px solid var(--navy);color:var(--navy);background:var(--panel);border-radius:3px;padding:1px 5px;cursor:pointer;vertical-align:middle;">map</button>` : '';
+      return `<td class="${editable?'bas-edit':''}${ci2===0?' sticky-col':''}" data-i="${i}" data-k="${key}" style="${editable?'cursor:pointer;':''}">${escapeHtml(String(e[key]||'')||'—')}${mapBtn}</td>`;
+    }).join('');
+    const delBtn = canGeneral()?`<button class="btn btn-danger btn-xs" data-del="${i}">Del</button>`:'<span style="color:#bbb;font-size:11px;">—</span>';
+    return `<tr>${cells}<td>${delBtn}</td></tr>`;
+  }).join('');
+  body.onchange=function(ev){
+    const sel=ev.target.closest('.bas-status');
+    if(sel){ if(!can('basStatus')){ permDenied(); renderBas(); return; } const i=+sel.dataset.i; basList[i].bas=sel.value; basSaveCloud(); renderBas(); }
+  };
+  body.onclick=function(ev){
+    const mb=ev.target.closest('.map-link-btn');
+    if(mb){ ev.stopPropagation(); jumpToMap(mb.dataset.mapname); return; }
+    const del=ev.target.closest('[data-del]');
+    if(del){ if(!canGeneral()){ permDenied(); return; } const i=+del.dataset.del; if(confirm(`Delete BAS entry "${basList[i].newName||basList[i].oldName}"?`)){ basList.splice(i,1); basSaveCloud(); renderBas(); } return; }
+    const ec=ev.target.closest('.bas-edit');
+    if(ec){ openBasCellEdit(+ec.dataset.i, ec.dataset.k); }
+  };
+}
+function openBasCellEdit(i,key){
+  const e=basList[i]; if(!e) return;
+  if(!can(basFieldScope(key))){ permDenied(); return; }
+  if(key==='notes'){
+    openNotesEditor('Notes', e.newName||e.oldName||'', e.notes||'', (val)=>{ e.notes=val; basSaveCloud(); renderBas(); showToast('Notes updated'); });
+    return;
+  }
+  const labels={alias:"Other Alias's",oldName:'Old Name',newName:'New Name',lvl:'LVL',area:'Area',type:'Type',notes:'Notes'};
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:360px;width:100%;padding:20px;">
+    <h2 style="margin:0 0 12px;font-size:16px;">${labels[key]||key}</h2>
+    <input type="text" id="bce-input" value="${escapeHtml(String(e[key]||''))}" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">
+    <div class="btn-row" style="margin-top:14px;"><button class="btn btn-outline" id="bce-cancel">Cancel</button><button class="btn" id="bce-save">Save</button></div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector('#bce-input'); inp.focus();
+  ov.querySelector('#bce-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#bce-save').onclick=()=>{ e[key]=(inp.value||'').trim(); basSaveCloud(); ov.remove(); renderBas(); showToast('Updated'); };
+}
+function openBasAdd(){
+  if(!canGeneral()){ permDenied(); return; }
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  const fields=[['newName','New Name'],['oldName','Old Name'],['alias',"Other Alias's"],['lvl','LVL'],['area','Area'],['type','Type'],['notes','Notes']];
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:85vh;overflow:auto;">
+    <h2 style="margin:0 0 12px;font-size:16px;">Add BAS Entry</h2>
+    ${fields.map(([k,l])=>`<div class="field"><label>${l}</label><input type="text" id="ba-${k}"></div>`).join('')}
+    <div class="field"><label>Renamed in BAS?</label><select id="ba-bas"><option value="">Not yet</option><option value="Y">Y</option><option value="N/A">N/A</option></select></div>
+    <div class="btn-row" style="margin-top:6px;"><button class="btn btn-outline" id="ba-cancel">Cancel</button><button class="btn btn-primary" id="ba-save">Add</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#ba-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#ba-save').onclick=()=>{
+    const g=k=>(document.getElementById('ba-'+k).value||'').trim();
+    const entry={alias:g('alias'),oldName:g('oldName'),newName:g('newName'),lvl:g('lvl'),area:g('area'),type:g('type'),bas:g('bas'),notes:g('notes')};
+    if(!entry.newName && !entry.oldName){ showToast('Enter at least a name'); return; }
+    basList.push(entry); basSaveCloud(); ov.remove(); renderBas(); showToast('Entry added');
+  };
+}
+async function handleBasXlsx(ev){
+  if(!canGeneral()){ permDenied(); try{ev.target.value='';}catch(e){} return; }
+  const file=ev.target.files&&ev.target.files[0];
+  if(!file) return;
+  if(typeof XLSX==='undefined'){ showToast('Excel library not loaded'); return; }
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const arr=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    // find header row (contains "New Name")
+    let hi=arr.findIndex(row=>row.some(c=>String(c).trim().toLowerCase()==='new name'));
+    if(hi<0) hi=1;
+    const header=arr[hi].map(c=>String(c).trim().toLowerCase());
+    const col=name=>header.findIndex(h=>h===name);
+    const ci={alias:col("other alias's"),old:col('old name'),nw:col('new name'),lvl:col('lvl'),area:col('area'),type:col('type'),bas:col('renamed in bas?'),notes:col('notes')};
+    const imported=[];
+    for(let r=hi+1;r<arr.length;r++){
+      const row=arr[r]; if(!row||!row.some(c=>String(c).trim())) continue;
+      const get=idx=> idx>=0 && row[idx]!==undefined ? String(row[idx]).trim() : '';
+      const entry={alias:get(ci.alias),oldName:get(ci.old),newName:get(ci.nw),lvl:get(ci.lvl),area:get(ci.area),type:get(ci.type),bas:get(ci.bas),notes:get(ci.notes)};
+      if(!entry.newName && !entry.oldName) continue;
+      imported.push(entry);
+    }
+    if(!imported.length){ showToast('No rows found in that Excel'); return; }
+    if(basList.length && !confirm(`Replace the current ${basList.length} BAS entries with ${imported.length} from this file?\n\n(Cancel to merge/append instead)`)){
+      basList=basList.concat(imported);
+    } else {
+      basList=imported;
+    }
+    await basSaveCloud(); renderBas();
+    showToast(`Imported ${imported.length} entries`);
+  }catch(e){ console.error('bas import',e); showToast('Import failed: '+(e.message||e)); }
+  try{ev.target.value='';}catch(e){}
+}
+function exportBas(){
+  if(!basList.length){ showToast('Nothing to export'); return; }
+  const aoa=[BAS_COLS.map(([h])=>h)];
+  basList.forEach(e=>aoa.push(BAS_COLS.map(([h,k])=>e[k]||'')));
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'BAS Names');
+  XLSX.writeFile(wb,'BAS_Name_Changes.xlsx');
+}
+
+/* =========================================================
+   SCHEDULE  (uploadable/editable list, synced via Firestore "schedule/<hospitalId>")
+   Done items cross off and sort to the bottom.
+   ========================================================= */
+const SCHEDULE_URL = 'https://arcticsheetmetal-my.sharepoint.com/:x:/g/personal/jareneells_arctic_biz/IQC5LPe4NvwuSJSUrp7FUHyFAX5bSjzAbiGc90b0goMhNw8?e=hYnY8t';
+function openSchedule(){ window.open(SCHEDULE_URL,'_blank'); }
+let schedule=[];
+const SCH_STORAGE='fsd_repairs_schedule_v1';
+const SCH_COLS=[
+  ['Date','date'],['Floor','floor'],['Name','name'],['Type','type'],['Location','location'],
+  ['Arctic','arctic'],['Cochran','cochran'],['Neudorfer','neudorfer'],
+  ['Time','time'],['Notes','notes'],['Sheet','sheet'],
+];
+function schLoadLocal(){ try{ return JSON.parse(localStorage.getItem(SCH_STORAGE))||[]; }catch(e){ return []; } }
+function schSaveLocal(){ try{ localStorage.setItem(SCH_STORAGE, JSON.stringify(schedule)); }catch(e){} }
+function schDocId(){ return (currentHospitalId||'unknown'); }
+async function schSaveCloud(){
+  schSaveLocal();
+  if(!firebaseReady) return;
+  try{ await db.collection('schedule').doc(schDocId()).set({ list: schedule, updatedAt: Date.now() }); }
+  catch(e){ console.error('schSaveCloud',e); showToast('Schedule save failed'); }
+}
+function schStartListener(){
+  if(!firebaseReady) return;
+  db.collection('schedule').doc(schDocId()).onSnapshot(doc=>{
+    if(doc.exists && Array.isArray(doc.data().list)){
+      schedule=doc.data().list;
+      schSaveLocal();
+      const v=document.getElementById('view-schedule');
+      if(v && v.classList.contains('active')) renderSchedule();
+    }
+  }, e=>console.error('schedule listener',e));
+}
+function schIsDone(item){ const d=(item.done||'').toString().trim().toLowerCase(); return d==='x'||d==='yes'||d==='y'||d==='true'||d==='done'; }
+function clearSchFilters(){
+  ['sch-search','sch-floor','sch-type','sch-done'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  renderSchedule();
+}
+function renderSchedule(){
+  const head=document.getElementById('sch-head');
+  const body=document.getElementById('sch-body');
+  const empty=document.getElementById('sch-empty');
+  const cnt=document.getElementById('sch-count');
+  if(!head) return;
+  // populate floor + type filters
+  const floorSel=document.getElementById('sch-floor'), typeSel=document.getElementById('sch-type');
+  const floors=[...new Set(schedule.map(s=>s.floor).filter(Boolean))].sort();
+  const types=[...new Set(schedule.map(s=>s.type).filter(Boolean))].sort();
+  const cf=floorSel.value, ct=typeSel.value;
+  floorSel.innerHTML='<option value="">Floor: All</option>'+floors.map(f=>`<option ${f===cf?'selected':''}>${escapeHtml(f)}</option>`).join('');
+  typeSel.innerHTML='<option value="">Type: All</option>'+types.map(t=>`<option ${t===ct?'selected':''}>${escapeHtml(t)}</option>`).join('');
+  const q=(document.getElementById('sch-search').value||'').trim().toLowerCase();
+  const fFloor=floorSel.value, fType=typeSel.value, fDone=document.getElementById('sch-done').value;
+  let rows=schedule.map((s,i)=>({s,i}));
+  if(q) rows=rows.filter(({s})=>[s.name,s.location,s.notes,s.type,s.floor].some(v=>String(v||'').toLowerCase().includes(q)));
+  if(fFloor) rows=rows.filter(({s})=>s.floor===fFloor);
+  if(fType) rows=rows.filter(({s})=>s.type===fType);
+  if(fDone==='__open__') rows=rows.filter(({s})=>!schIsDone(s));
+  if(fDone==='__done__') rows=rows.filter(({s})=>schIsDone(s));
+  // Sort: open items first (keep original order), done items to the bottom
+  rows.sort((a,b)=>{ const da=schIsDone(a.s)?1:0, db_=schIsDone(b.s)?1:0; return da-db_ || a.i-b.i; });
+  const schHidden=getHidden(SCH_HIDDEN_KEY);
+  const visSchCols=SCH_COLS.filter(([h,k])=>!schHidden.includes(k));
+  head.innerHTML='<th class="sticky-col">Done</th>'+visSchCols.map(([h,k])=>`<th data-scol="${k}" title="Tap to hide" style="cursor:pointer;white-space:nowrap;">${h} <span style="font-size:9px;font-weight:600;color:var(--navy);background:var(--panel2);border-radius:3px;padding:1px 4px;">hide</span></th>`).join('')+'<th>Actions</th>';
+  head.onclick=function(ev){ const th=ev.target.closest('th[data-scol]'); if(th) schHideCol(th.dataset.scol); };
+  if(cnt){ const done=schedule.filter(schIsDone).length; cnt.textContent=`Showing ${rows.length} of ${schedule.length} · ${done} done, ${schedule.length-done} open`; }
+  const shc=document.getElementById('sch-hidden-cols');
+  if(shc){
+    if(schHidden.length){
+      const lf=k=>{ const c=SCH_COLS.find(([h,kk])=>kk===k); return c?c[0]:k; };
+      shc.innerHTML=`<span style="font-size:11px;color:var(--text-dim);margin-right:4px;">Hidden (tap to show):</span>`+schHidden.map(k=>`<button class="sch-show-col" data-col="${k}" style="font-size:11px;border:1px solid var(--line);border-radius:12px;padding:3px 10px;margin:0 4px 4px 0;background:var(--panel);cursor:pointer;">+ ${escapeHtml(lf(k))}</button>`).join('');
+      shc.querySelectorAll('.sch-show-col').forEach(b=>b.addEventListener('click',()=>schShowCol(b.dataset.col)));
+    } else shc.innerHTML='';
+  }
+  if(!rows.length){ body.innerHTML=''; empty.style.display='block'; empty.innerHTML= schedule.length?'No items match.':'No schedule yet. Import the Excel or add items.'; return; }
+  empty.style.display='none';
+  body.innerHTML=rows.map(({s,i})=>{
+    const done=schIsDone(s);
+    // "Done" is general schedule management (Arctic only)
+    const doneCell=`<td class="sticky-col" style="${done?'background:var(--panel2);':''}">${canGeneral()?`<button class="btn ${done?'btn-primary':'btn-outline'} btn-xs sch-done" data-i="${i}">${done?'✓ Done':'No'}</button>`:`<span class="badge ${done?'pass':'fail'}" style="font-size:10px;">${done?'Done':'No'}</span>`}</td>`;
+    const pairBadge = s.pairId ? ` <span class="badge" style="background:var(--navy);color:#fff;font-size:9px;" title="Paired — moves together">🔗</span>` : '';
+    const cells=visSchCols.map(([h,key])=>{
+      let val=s[key]||'';
+      let extra = (key==='name') ? pairBadge : '';
+      if(key==='name' && String(s.name||'').trim()){
+        extra += ` <button class="map-link-btn" data-mapname="${escapeHtml(s.name)}" title="Show on map" style="font-size:9px;font-weight:700;border:1px solid var(--navy);color:var(--navy);background:var(--panel);border-radius:3px;padding:1px 5px;cursor:pointer;vertical-align:middle;">map</button>`;
+      }
+      const editable=can(schedFieldScope(key));
+      return `<td class="${editable?'sch-edit':''}" data-i="${i}" data-k="${key}" style="${editable?'cursor:pointer;':''}${done?'text-decoration:line-through;color:#999;':''}">${escapeHtml(String(val)||'—')}${extra}</td>`;
+    }).join('');
+    let actionBtns='';
+    if(canGeneral()){
+      actionBtns=`<button class="btn btn-outline btn-xs" data-pair="${i}">${s.pairId?'Unpair':'Pair'}</button><button class="btn btn-danger btn-xs" data-del="${i}">Del</button>`;
+    } else {
+      actionBtns='<span style="color:#bbb;font-size:11px;">—</span>';
+    }
+    return `<tr${done?' style="opacity:0.65;"':''}>${doneCell}${cells}<td><div class="actions-cell">${actionBtns}</div></td></tr>`;
+  }).join('');
+  body.onclick=function(ev){
+    const mb=ev.target.closest('.map-link-btn');
+    if(mb){ ev.stopPropagation(); jumpToMap(mb.dataset.mapname); return; }
+    const dn=ev.target.closest('.sch-done');
+    if(dn){ if(!canGeneral()){ permDenied(); return; } const i=+dn.dataset.i; schedule[i].done=schIsDone(schedule[i])?'':'x'; schSaveCloud(); renderSchedule(); return; }
+    const pr=ev.target.closest('[data-pair]');
+    if(pr){ if(!canGeneral()){ permDenied(); return; } const i=+pr.dataset.pair; if(schedule[i].pairId){ unpairItem(i); } else { openPairPicker(i); } return; }
+    const del=ev.target.closest('[data-del]');
+    if(del){ if(!canGeneral()){ permDenied(); return; } const i=+del.dataset.del; if(confirm(`Delete "${schedule[i].name||'item'}"?`)){ schedule.splice(i,1); schSaveCloud(); renderSchedule(); } return; }
+    const ec=ev.target.closest('.sch-edit');
+    if(ec){ openSchCellEdit(+ec.dataset.i, ec.dataset.k); }
+  };
+}
+// Parse a schedule date string (M/D/YY or M/D/YYYY) to a Date at local midnight
+function schParseDate(s){
+  const m=/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec((s||'').trim());
+  if(!m) return null;
+  let y=parseInt(m[3]); if(y<100) y+=2000;
+  const d=new Date(y, parseInt(m[1])-1, parseInt(m[2]));
+  return isNaN(d)?null:d;
+}
+function schFmtDate(d){ return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2); }
+function schDateKey(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+// Count scheduled (non-done) items per day
+function schDayCounts(excludeIndex){
+  const counts={};
+  schedule.forEach((s,idx)=>{
+    if(idx===excludeIndex) return;
+    if(schIsDone(s)) return;
+    const d=schParseDate(s.date); if(!d) return;
+    const k=schDateKey(d); counts[k]=(counts[k]||0)+1;
+  });
+  return counts;
+}
+// Suggest good weekday dates: closest-first, prefer empty/light days, stop at end of job
+function schSuggestDates(excludeIndex){
+  const counts=schDayCounts(excludeIndex);
+  // Determine the job's date span from existing scheduled items
+  const dates=schedule.map(s=>schParseDate(s.date)).filter(Boolean).sort((a,b)=>a-b);
+  const start=new Date(); start.setHours(0,0,0,0);
+  // Walk forward day by day; track consecutive blank weekdays to detect job end
+  const suggestions=[];
+  let consecutiveBlank=0;
+  let cursor=new Date(start);
+  const HORIZON=180; // safety cap in days
+  for(let n=0;n<HORIZON;n++){
+    const dow=cursor.getDay();
+    const isWeekday=dow>=1 && dow<=5;
+    if(isWeekday){
+      const k=schDateKey(cursor);
+      const c=counts[k]||0;
+      if(c===0) consecutiveBlank++; else consecutiveBlank=0;
+      // Stop suggesting once we hit 7 blank weekdays in a row (end of job window)
+      if(consecutiveBlank>=7) break;
+      suggestions.push({ date:new Date(cursor), count:c });
+    }
+    cursor.setDate(cursor.getDate()+1);
+  }
+  // Sort: lightest days first, then closest. Keep only empty or light (<=2) days.
+  const light=suggestions.filter(s=>s.count<=2);
+  light.sort((a,b)=> a.count-b.count || a.date-b.date);
+  return light.slice(0,40);
+}
+function unpairItem(i){
+  const pid=schedule[i].pairId;
+  if(!pid) return;
+  const members=schedule.filter(s=>s.pairId===pid);
+  if(members.length<=2){
+    // Removing from a 2-item pair dissolves it
+    schedule.forEach(s=>{ if(s.pairId===pid) delete s.pairId; });
+  } else {
+    delete schedule[i].pairId;
+  }
+  schSaveCloud(); renderSchedule(); showToast('Unpaired');
+}
+function openPairPicker(i){
+  const base=schedule[i];
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  // candidates = other items not already in a different pair
+  const candidates=schedule.map((s,idx)=>({s,idx})).filter(({s,idx})=> idx!==i && !schIsDone(s) && (!s.pairId || s.pairId===base.pairId));
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:420px;width:100%;padding:20px;max-height:85vh;overflow:auto;">
+    <h2 style="margin:0 0 4px;font-size:16px;">Pair with "${escapeHtml(base.name||'')}"</h2>
+    <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Select items that must be done together. When one's date moves, they all move.</p>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${candidates.map(({s,idx})=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;border:1px solid var(--line);border-radius:6px;padding:8px;cursor:pointer;">
+        <input type="checkbox" value="${idx}" style="width:auto;"> <b>${escapeHtml(s.name||'—')}</b> <span style="color:var(--text-dim);">${escapeHtml(s.type||'')} · ${escapeHtml(s.date||'no date')}</span></label>`).join('')||'<div style="font-size:12px;color:var(--text-dim);">No available items to pair.</div>'}
+    </div>
+    <div class="btn-row" style="margin-top:14px;"><button class="btn btn-outline" id="pp-cancel">Cancel</button><button class="btn btn-primary" id="pp-save">Pair</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#pp-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#pp-save').onclick=()=>{
+    const picked=[...ov.querySelectorAll('input[type=checkbox]:checked')].map(c=>+c.value);
+    if(!picked.length){ showToast('Select at least one item'); return; }
+    const pid = base.pairId || ('pair_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6));
+    base.pairId=pid;
+    picked.forEach(idx=>{ schedule[idx].pairId=pid; });
+    // Align paired items to the base item's date (if it has one)
+    if(base.date){ schedule.forEach(s=>{ if(s.pairId===pid) s.date=base.date; }); }
+    schSaveCloud(); ov.remove(); renderSchedule();
+    showToast(`Paired ${picked.length+1} items`);
+  };
+}
+// Return the (non-done) schedule items already on a given date key
+function schItemsOnDateKey(k, excludeIndex){
+  return schedule.filter((s,idx)=>{
+    if(idx===excludeIndex) return false;
+    if(schIsDone(s)) return false;
+    const d=schParseDate(s.date); if(!d) return false;
+    return schDateKey(d)===k;
+  });
+}
+function openSchCellEdit(i,key){
+  const s=schedule[i]; if(!s) return;
+  if(!can(schedFieldScope(key))){ permDenied(); return; }
+  if(key==='notes'){
+    openNotesEditor('Notes', s.name||'', s.notes||'', (val)=>{ s.notes=val; schSaveCloud(); renderSchedule(); showToast('Notes updated'); });
+    return;
+  }
+  const lbl=(SCH_COLS.find(([h,k])=>k===key)||[key])[0];
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  const isChoice=['arctic','cochran','neudorfer'].includes(key);
+  let inputHtml;
+  if(key==='date'){
+    inputHtml=`<input type="text" id="sce-input" value="${escapeHtml(String(s[key]||''))}" placeholder="M/D/YY" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">
+      <div style="display:flex;gap:6px;margin:14px 0 8px;">
+        <button type="button" class="sug-mode btn btn-primary btn-sm" data-mode="empty" style="flex:1;margin:0;">Empty days</button>
+        <button type="button" class="sug-mode btn btn-outline btn-sm" data-mode="light" style="flex:1;margin:0;">Light days</button>
+      </div>
+      <div id="sug-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow:auto;"></div>`;
+  } else if(isChoice){
+    inputHtml=`<select id="sce-input" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;"><option value="">—</option><option ${s[key]==='Yes'?'selected':''}>Yes</option><option ${s[key]==='No'?'selected':''}>No</option></select>`;
+  } else {
+    inputHtml=`<input type="text" id="sce-input" value="${escapeHtml(String(s[key]||''))}" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px;">`;
+  }
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:380px;width:100%;padding:20px;max-height:85vh;overflow:auto;">
+    <h2 style="margin:0 0 12px;font-size:16px;">${escapeHtml(lbl)}</h2>${inputHtml}
+    <div class="btn-row" style="margin-top:14px;"><button class="btn btn-outline" id="sce-cancel">Cancel</button><button class="btn" id="sce-save">Save</button></div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector('#sce-input'); if(inp.focus) inp.focus();
+  // Date mode: render Empty/Light suggestions with details about dampers already on each day
+  if(key==='date'){
+    const listEl=ov.querySelector('#sug-list');
+    const dow=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+    const renderSug=(mode)=>{
+      const all=schSuggestDates(i); // already weekday, closest-first, within job window
+      const picked = mode==='empty' ? all.filter(s2=>s2.count===0) : all.filter(s2=>s2.count>0 && s2.count<=2);
+      if(!picked.length){ listEl.innerHTML=`<div style="font-size:12px;color:var(--text-dim);padding:8px;">No ${mode} work days found in the job window.</div>`; return; }
+      listEl.innerHTML=picked.map(su=>{
+        const k=schDateKey(su.date);
+        const items=schItemsOnDateKey(k, i);
+        const details = items.length
+          ? `<div style="font-size:11px;color:var(--text-dim);margin-top:4px;line-height:1.5;">${items.map(it=>{
+              const who=[it.arctic==='Yes'?'Arctic':'',it.cochran==='Yes'?'Cochran':'',it.neudorfer==='Yes'?'Neudorfer':''].filter(Boolean).join('/');
+              return `• <b>${escapeHtml(it.name||'—')}</b>${it.type?' · '+escapeHtml(it.type):''}${it.floor?' · '+escapeHtml(it.floor):''}${who?' · '+who:''}${it.location?' · '+escapeHtml(it.location):''}`;
+            }).join('<br>')}</div>`
+          : '';
+        const tag=su.count===0?'OPEN':`${su.count} scheduled`;
+        const col=su.count===0?'var(--green)':'var(--gold)';
+        return `<button type="button" class="sug-date" data-d="${schFmtDate(su.date)}" style="text-align:left;border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:var(--panel);cursor:pointer;font-size:13px;">
+          <div style="display:flex;justify-content:space-between;gap:10px;"><span style="font-weight:700;">${dow(su.date)} ${schFmtDate(su.date)}</span><span style="color:${col};font-weight:700;">${tag}</span></div>
+          ${details}</button>`;
+      }).join('');
+      listEl.querySelectorAll('.sug-date').forEach(b=>b.addEventListener('click',()=>{ inp.value=b.dataset.d; }));
+    };
+    ov.querySelectorAll('.sug-mode').forEach(btn=>btn.addEventListener('click',()=>{
+      ov.querySelectorAll('.sug-mode').forEach(x=>{ x.classList.add('btn-outline'); x.classList.remove('btn-primary'); });
+      btn.classList.remove('btn-outline'); btn.classList.add('btn-primary');
+      renderSug(btn.dataset.mode);
+    }));
+    renderSug('empty');
+  }
+  ov.querySelector('#sce-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#sce-save').onclick=()=>{
+    const newVal=(inp.value||'').trim();
+    if(key==='date' && s.pairId){
+      // Move all items in the same pair to the new date
+      schedule.forEach(it=>{ if(it.pairId===s.pairId) it.date=newVal; });
+    } else {
+      s[key]=newVal;
+    }
+    schSaveCloud(); ov.remove(); renderSchedule();
+    showToast(key==='date'&&s.pairId?'Paired items moved':'Updated');
+  };
+}
+function openSchAdd(){
+  if(!canGeneral()){ permDenied(); return; }
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:400px;width:100%;padding:20px;max-height:85vh;overflow:auto;">
+    <h2 style="margin:0 0 12px;font-size:16px;">Add Schedule Item</h2>
+    ${SCH_COLS.map(([l,k])=>`<div class="field"><label>${l}</label><input type="text" id="sa-${k}"></div>`).join('')}
+    <div class="btn-row" style="margin-top:6px;"><button class="btn btn-outline" id="sa-cancel">Cancel</button><button class="btn btn-primary" id="sa-save">Add</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#sa-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#sa-save').onclick=()=>{
+    const item={done:''};
+    SCH_COLS.forEach(([l,k])=>{ item[k]=(document.getElementById('sa-'+k).value||'').trim(); });
+    if(!item.name){ showToast('Enter a name'); return; }
+    schedule.push(item); schSaveCloud(); ov.remove(); renderSchedule(); showToast('Item added');
+  };
+}
+async function handleSchXlsx(ev){
+  if(!canGeneral()){ permDenied(); try{ev.target.value='';}catch(e){} return; }
+  const file=ev.target.files&&ev.target.files[0];
+  if(!file) return;
+  if(typeof XLSX==='undefined'){ showToast('Excel library not loaded'); return; }
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const arr=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    // header row contains "Name"
+    let hi=arr.findIndex(row=>row.some(c=>String(c).trim().toLowerCase()==='name'));
+    if(hi<0) hi=0;
+    const header=arr[hi].map(c=>String(c).trim().toLowerCase());
+    const col=(...names)=>{ for(const n of names){ const idx=header.findIndex(h=>h===n); if(idx>=0) return idx; } return -1; };
+    const ci={floor:col('floor'),name:col('name'),type:col('type'),location:col('location'),arctic:col('arctic'),cochran:col('cochran'),neudorfer:col('neudorfer','neudorfer/ integra'),date:col('date','target date'),time:col('time'),notes:col('notes'),done:col('done'),sheet:col('sheet')};
+    const fmtDate=v=>{ if(v instanceof Date && !isNaN(v)) return (v.getMonth()+1)+'/'+v.getDate()+'/'+String(v.getFullYear()).slice(2); return String(v||'').trim(); };
+    const cleanName=v=>String(v||'').replace(/[\u2000-\u200D\u00A0]/g,' ').replace(/\s+/g,' ').trim();
+    const imported=[];
+    for(let r=hi+1;r<arr.length;r++){
+      const row=arr[r]; if(!row||!row.some(c=>String(c).trim())) continue;
+      const get=idx=> idx>=0 && row[idx]!==undefined ? String(row[idx]).trim() : '';
+      const item={
+        floor:get(ci.floor), name:cleanName(row[ci.name]), type:get(ci.type), location:get(ci.location),
+        arctic:get(ci.arctic), cochran:get(ci.cochran), neudorfer:get(ci.neudorfer),
+        date: ci.date>=0? fmtDate(row[ci.date]) : '', time:get(ci.time), notes:get(ci.notes),
+        done:get(ci.done), sheet:get(ci.sheet),
+      };
+      if(!item.name) continue;
+      imported.push(item);
+    }
+    if(!imported.length){ showToast('No rows found'); return; }
+    if(schedule.length && !confirm(`Replace the current ${schedule.length} schedule items with ${imported.length} from this file?\n\n(Cancel to append instead)`)){
+      schedule=schedule.concat(imported);
+    } else { schedule=imported; }
+    await schSaveCloud(); renderSchedule();
+    showToast(`Imported ${imported.length} items`);
+  }catch(e){ console.error('sch import',e); showToast('Import failed: '+(e.message||e)); }
+  try{ev.target.value='';}catch(e){}
+}
+function exportSchedule(){
+  if(!schedule.length){ showToast('Nothing to export'); return; }
+  const cols=[['Floor','floor'],['Name','name'],['Type','type'],['Location','location'],['Arctic','arctic'],['Cochran','cochran'],['Neudorfer','neudorfer'],['Date','date'],['Time','time'],['Notes','notes'],['Done','done'],['Sheet','sheet']];
+  const aoa=[cols.map(([h])=>h)];
+  // open items first, done at bottom (mirrors the view)
+  const ordered=schedule.map((s,i)=>({s,i})).sort((a,b)=>(schIsDone(a.s)?1:0)-(schIsDone(b.s)?1:0)||a.i-b.i).map(x=>x.s);
+  ordered.forEach(s=>aoa.push(cols.map(([h,k])=> k==='done'? (schIsDone(s)?'x':'') : (s[k]||''))));
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Schedule');
+  XLSX.writeFile(wb,'Schedule.xlsx');
+}
+
+/* ---- INIT ---- */
+document.getElementById('version-badge').textContent=APP_VERSION;
+{ const _lg=document.getElementById('header-logo-img'); if(_lg) _lg.src=ARCTIC_LOGO; }
+document.getElementById('import-zip-input').addEventListener('change',handleZipImport);
+document.getElementById('bas-xlsx-input').addEventListener('change',handleBasXlsx);
+document.getElementById('sch-xlsx-input').addEventListener('change',handleSchXlsx);
+basList=basLoadLocal();
+schedule=schLoadLocal();
+initMapControls();
+
+// Company gate: prompt on first launch, then apply permissions to the UI
+async function bootWithCompany(){
+  currentCompany=loadCompany();
+  if(!currentCompany){ await promptCompany(); }
+  applyCompanyUI();
+  renderDashboard();
+  initFirebase();
+}
+bootWithCompany();
+// If Firebase never even initializes (fully offline), don't hang forever.
+// When online, the records onSnapshot hides the spinner once data is on-device.
+setTimeout(()=>{ if(!firebaseReady && typeof hideLoading==='function'){ hideLoading(); showToast('Offline - showing local data'); } }, 15000);
+</script>
+</body>
+</html>
