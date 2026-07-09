@@ -107,7 +107,7 @@
     </div>
     <div class="spacer"></div>
     <a class="back-link" id="back-link" href="index.html">&#8592; Main Site</a>
-    <span class="version-badge" id="version-badge">v1.5</span>
+    <span class="version-badge" id="version-badge">v1.6</span>
   </header>
   <nav class="tabs" id="tabs">
     <button class="active" data-view="dashboard" onclick="switchView('dashboard')">Dashboard</button>
@@ -278,7 +278,7 @@
    Shares Firebase with the main site but only reads/writes
    records scoped to hospitalId + subFolder = "Repairs & Decommissions".
    ========================================================= */
-const APP_VERSION = 'v1.5';
+const APP_VERSION = 'v1.6';
 const REPAIR_BUILDING = 'Repairs & Decommissions';
 const CLEAR_LOG_PIN = '1977';
 const STORAGE_KEY = 'fsd_repairs_records_v1';
@@ -313,7 +313,11 @@ function slugify(s){ return String(s||'').toLowerCase().trim().replace(/[^a-z0-9
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeJs(s){ return String(s==null?'':s).replace(/["'\\]/g,'\\$&').replace(/\n/g,'\\n'); }
 function normDamperId(s){ return String(s||'').toUpperCase().replace(/^FSD[-\s]?/, '').replace(/[^A-Z0-9]/g,''); }
-function isComplete(r){ return !!(r.repairMade && String(r.repairMade).trim()) && !!(r.photos && r.photos.length>0); }
+function isComplete(r){
+  if(r.statusOverride==='complete') return true;
+  if(r.statusOverride==='incomplete') return false;
+  return !!(r.repairMade && String(r.repairMade).trim()) && !!(r.photos && r.photos.length>0);
+}
 const REPAIR_GROUP=['Tabs','Motor','Access','Repaired']; // all count as "repairs"
 const REPLACED_GROUP=['Replaced','Replacement']; // both count as "replaced"
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._to); t._to=setTimeout(()=>t.classList.remove('show'),2600); }
@@ -596,17 +600,17 @@ function renderLog(){
   // older rounds ("- Round N") collapse into a dropdown under it.
   const buildRow=(r, isSub)=>{
     const cells=LOG_COLUMNS.map(([h,key])=>{
-      if(key==='__status') return `<td>${isComplete(r)?'<span class="badge pass">Complete</span>':'<span class="badge fail">Incomplete</span>'}</td>`;
+      if(key==='__status') return `<td class="editable" data-ek="__status" data-id="${r._id}">${isComplete(r)?'<span class="badge pass">Complete</span>':'<span class="badge fail">Incomplete</span>'}</td>`;
       if(key==='__photos') return `<td>${(r.photos||[]).length}/${MAX_PHOTOS}</td>`;
       if(key==='testResult') return `<td class="editable" data-ek="testResult" data-id="${r._id}">${r.testResult?`<span class="badge ${badge[r.testResult]||''}">${r.testResult}</span>`:'—'}</td>`;
       if(key==='damperId'){
         const onMap = mapLabelSet ? mapLabelSet.has(normDamperId(baseDamperName(r.damperId))) : true;
         const flag = onMap ? '' : ` <span class="badge fail nomap-flag" data-id="${r._id}" title="Not on the map — click to place it (laptop)" style="font-size:10px;cursor:pointer;">&#9873; Not on map</span>`;
-        return `<td class="sticky-col" style="${isSub?'padding-left:24px;background:var(--panel2);':''}"><div style="display:flex;align-items:center;gap:8px;"><button class="btn btn-outline btn-xs" data-action="edit" data-id="${r._id}">Edit</button><span class="did-link" data-action="map" data-id="${r._id}">${escapeHtml(r.damperId||'—')}</span>${flag}</div></td>`;
+        return `<td class="sticky-col" style="${isSub?'padding-left:24px;background:var(--panel2);':''}"><div style="display:flex;align-items:center;gap:8px;"><button class="btn btn-outline btn-xs" data-action="edit" data-id="${r._id}">Edit</button><button class="btn btn-outline btn-xs" data-action="open" data-id="${r._id}">PDF</button><span class="did-link" data-action="map" data-id="${r._id}">${escapeHtml(r.damperId||'—')}</span>${flag}</div></td>`;
       }
       return `<td class="editable" data-ek="${key}" data-id="${r._id}">${escapeHtml(r[key]||'—')}</td>`;
     }).join('');
-    const actions=`<td><div class="actions-cell"><button class="btn btn-outline" data-action="open" data-id="${r._id}">Open</button><button class="btn btn-outline" data-action="map" data-id="${r._id}">Map</button><button class="btn btn-danger" data-action="del" data-id="${r._id}">Del</button></div></td>`;
+    const actions=`<td><div class="actions-cell"><button class="btn btn-outline" data-action="map" data-id="${r._id}">Map</button><button class="btn btn-danger" data-action="del" data-id="${r._id}">Del</button></div></td>`;
     return `<tr${isSub?' class="round-sub" style="display:none;"':''} data-base="${escapeHtml(normDamperId(baseDamperName(r.damperId)))}">${cells}${actions}</tr>`;
   };
 
@@ -948,6 +952,37 @@ function fieldLabelFor(key){
 function openCellEditor(id, key){
   const r = records.find(x=>x._id===id);
   if(!r) return;
+  // Status is normally derived (Repair Made + photo). Allow a manual override.
+  if(key==='__status'){
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:650;background:rgba(10,14,40,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+    const curState=isComplete(r);
+    ov.innerHTML=`<div style="background:var(--panel);border-radius:12px;max-width:380px;width:100%;padding:20px;">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;">${escapeHtml(r.damperId||'')}</div>
+      <h2 style="margin:0 0 4px;font-size:16px;">Status</h2>
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Normally set by Repair Made + a photo. You can override it here.</p>
+      <div class="btn-row" style="flex-direction:column;">
+        <button class="btn ${curState?'':'btn-outline'}" data-s="complete">Complete</button>
+        <button class="btn ${!curState?'':'btn-outline'}" data-s="incomplete">Incomplete</button>
+        <button class="btn btn-outline" data-s="auto" style="margin-top:6px;">Use automatic (Repair Made + photo)</button>
+        <button class="btn btn-outline" data-s="cancel">Cancel</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click',e=>{
+      const b=e.target.closest('[data-s]'); if(!b) return;
+      const s=b.dataset.s;
+      if(s!=='cancel'){
+        if(s==='complete') r.statusOverride='complete';
+        else if(s==='incomplete') r.statusOverride='incomplete';
+        else delete r.statusOverride; // auto
+        saveLocal(); fbSave(r);
+        renderLog(); renderDashboard();
+        showToast('Status updated');
+      }
+      ov.remove();
+    });
+    return;
+  }
   const label = fieldLabelFor(key);
   const options = fieldOptionsFor(key);
   const cur = r[key]||'';
