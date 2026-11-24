@@ -3449,6 +3449,8 @@ function analyzePdfBytes(buf){
     images:n(/\/Subtype\s*\/Image/g),
     jpx:n(/\/JPXDecode/g), jbig2:n(/\/JBIG2Decode/g), ccitt:n(/\/CCITTFaxDecode/g), dct:n(/\/DCTDecode/g),
     objStreams:n(/\/ObjStm/g), maxW, maxH, maxImgMP:+((maxImgPixels)/1e6).toFixed(1),
+    smask:n(/\/SMask/g), tgroups:n(/\/S\s*\/Transparency/g), patterns:n(/\/PatternType/g),
+    shadings:n(/\/ShadingType/g), forms:n(/\/Subtype\s*\/Form/g),
   };
 }
 function mapDiagShort(d){
@@ -3456,8 +3458,13 @@ function mapDiagShort(d){
   const bits=[`${d.sizeMB}MB`];
   if(d.images) bits.push(`${d.images} img${d.maxW?` ≤${d.maxW}×${d.maxH}`:''}`);
   const slow=[]; if(d.jpx) slow.push(`JPEG2000×${d.jpx}`); if(d.jbig2) slow.push(`JBIG2×${d.jbig2}`); if(d.ccitt) slow.push(`CCITT×${d.ccitt}`);
+  if(d.tgroups) bits.push(`${d.tgroups} transp-grp`);
+  if(d.patterns||d.shadings) bits.push(`${d.patterns}pat/${d.shadings}shd`);
+  if(d.forms) bits.push(`${d.forms} form`);
   if(slow.length) bits.push('⚠ '+slow.join(' '));
   else if(!d.images && d.objStreams) bits.push('(compressed structure — can’t inspect images)');
+  const g=gpuRenderer(), cb=canvasBenchMs();
+  bits.push(`gpu:${gpuIsSoftware(g)?'SOFTWARE ⚠':'ok'} ${cb}ms`);
   return bits.join(' · ');
 }
 function mapDiagAdvice(d){
@@ -3465,6 +3472,38 @@ function mapDiagAdvice(d){
   if(d.jpx||d.jbig2||d.ccitt) return ' This drawing’s image is in a format (JPEG2000/JBIG2) that browsers decode very slowly. In Bluebeam/Acrobat, flatten the markups and “Reduce File Size” (or re-export the plan as a standard PDF), then upload again.';
   if(d.maxImgMP>=40) return ` This drawing contains a very large image (${d.maxW}×${d.maxH}). Re-export or reduce it (Bluebeam: “Reduce File Size”) and upload again.`;
   return ' This drawing is likely too heavy for the browser to rasterize. Try flattening it or exporting a lighter-weight PDF.';
+}
+
+// What the browser is actually rendering with. If Chrome has fallen back to
+// software rendering (SwiftShader / llvmpipe) every large canvas operation gets
+// roughly an order of magnitude slower — which looks exactly like "the same
+// drawing that used to load now takes forever", with no change to the file or app.
+function gpuRenderer(){
+  try{
+    const c=document.createElement('canvas');
+    const gl=c.getContext('webgl')||c.getContext('experimental-webgl');
+    if(!gl) return 'none (software)';
+    const dbg=gl.getExtension('WEBGL_debug_renderer_info');
+    const r=dbg?gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);
+    return String(r||'unknown');
+  }catch(e){ return 'unknown'; }
+}
+function gpuIsSoftware(s){ return /swiftshader|llvmpipe|software|basic render|microsoft basic/i.test(s||'') || s==='none (software)'; }
+// Rough canvas throughput. On a healthy GPU-accelerated browser this is a few ms;
+// on software rendering it is many times that.
+function canvasBenchMs(){
+  try{
+    const a=document.createElement('canvas'); a.width=a.height=1024;
+    const ax=a.getContext('2d'); ax.fillStyle='#abc'; ax.fillRect(0,0,1024,1024);
+    const b=document.createElement('canvas'); b.width=b.height=1024;
+    const bx=b.getContext('2d');
+    const t=performance.now();
+    for(let i=0;i<40;i++) bx.drawImage(a,0,0,1024,1024,0,0,1024,1024);
+    bx.getImageData(0,0,1,1); // force the queued work to actually run
+    const ms=performance.now()-t;
+    a.width=a.height=0; b.width=b.height=0;
+    return Math.round(ms);
+  }catch(e){ return -1; }
 }
 
 // Can this device make a canvas this big and read a pixel back from its far corner?
@@ -4043,6 +4082,18 @@ async function handleMapUpload(event, hospitalId){
       try{
         pageObj = await pdf.getPage(p.page);
         const vp = pageObj.getViewport({scale:1});
+        // Split the two halves of the work so a stall names its own phase: building
+        // the operator list (parsing + image decode, in the worker) vs rasterizing it
+        // (main thread). render() reuses this result, so timing it costs nothing.
+        lastMsg='reading page content';
+        paint();
+        const tOps=Date.now();
+        let opCount=-1;
+        try{ const ol=await pageObj.getOperatorList(); opCount=ol.fnArray.length; }catch(e){}
+        const opMs=Date.now()-tOps;
+        console.log('[map] page',p.page,'operator list:',opCount,'ops in',opMs+'ms');
+        lastMsg=`ops=${opCount} read in ${(opMs/1000).toFixed(1)}s · rendering 0/…`;
+        paint();
         // Watchdog: if a page never finishes rendering (a drawing too heavy for this
         // browser), cancel it and fail clearly instead of freezing the tab forever.
         const work = renderPageTiles(pageObj, vp, (msg)=>{ lastMsg=msg; paint(); });
